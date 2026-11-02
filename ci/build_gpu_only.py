@@ -1,0 +1,216 @@
+"""Build source-pinned candidate GPU components on real macOS; never install."""
+import argparse, datetime, hashlib, json, os, platform, shutil, subprocess, sys
+from pathlib import Path
+from verify_gpu_artifacts import check, require
+
+MAIN = '6790e7ce6e77f67a9174fba1255e64eacf1c41ad'
+DEVICE = '28b30285768e04008ac525c04182e245bfac441e'
+MESA = '85fda3b36405bcaea8bffc64aa4f2651dc90770d'
+TRANSLATOR = '624bab3918de5b978e1101517abca2b4fa426565'
+parser = argparse.ArgumentParser()
+parser.add_argument('--root', type=Path, required=True)
+parser.add_argument('--device', type=Path, required=True)
+parser.add_argument('--output', type=Path, required=True)
+a = parser.parse_args()
+root, device, output = a.root.resolve(), a.device.resolve(), a.output.resolve()
+require(platform.system() == 'Darwin' and platform.machine() == 'arm64', 'Real ARM64 macOS runner required')
+require(not output.exists(), 'Use fresh output; preserve previous candidates')
+output.mkdir(parents=True)
+logs = output / 'logs'
+logs.mkdir()
+require(shutil.disk_usage(root).free  >= 8 * 1024**3, 'At least8GiB free after tools required')
+env = dict(os.environ, CARGO_BUILD_JOBS='1', RUSTUP_TOOLCHAIN='1.98.0', PYTHONDONTWRITEBYTECODE='1')
+
+def run(argv, name, timeout=1800, cwd=root):
+    with (logs / (name + '.log')).open('wb') as stream:
+        r = subprocess.run(list(map(str, argv)), cwd=cwd, env=env,
+                           stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
+    require(r.returncode == 0, 'Failed phase ' + name + '; see bounded artifact logs')
+
+def read(argv, cwd=root):
+    return subprocess.check_output(list(map(str, argv)), cwd=cwd, env=env,
+                                   text=True, timeout=30).strip()
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+require(read(['git', 'rev-parse', 'HEAD']) == MAIN, 'Wrong UniXNU source')
+require(read(['git', 'rev-parse', 'HEAD'], device) == DEVICE, 'Wrong device source')
+require(read(['git', 'status', '--porcelain']) == '', 'Source checkout must start clean')
+# Resource-only adapters call the real tool, preserving all source and build flags.
+tool_adapters = root / 'build/ci-tools'
+tool_adapters.mkdir(parents=True)
+real_ninja, real_make = shutil.which('ninja'), shutil.which('make')
+require(real_ninja and real_make, 'Real Ninja and make required')
+for name, real in [('ninja', real_ninja), ('make', real_make)]:
+    p = tool_adapters / name
+    p.write_text('#!' + sys.executable + '\nimport os,sys\nos.execv(' + repr(real) +
+                 ', [' + repr(real) + '] + sys.argv[1:] + ["-j2"])\n')
+    p.chmod(0o755)
+env['PATH'] = str(tool_adapters) + os.pathsep + env['PATH']
+
+sdk = Path(read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path']))
+macsdk = Path(read(['xcrun', '--sdk', 'macosx', '--show-sdk-path']))
+for p in [sdk / 'SDKSettings.plist', sdk / 'usr/include/stdio.h',
+          sdk / 'System/Library/Frameworks/Metal.framework/Headers/Metal.h',
+          macsdk / 'System/Library/Frameworks/IOKit.framework/Headers/IOKitLib.h',
+          Path('/opt/homebrew/include/vulkan/vulkan.h')]:
+    require(p.is_file(), 'Missing real SDK input: ' + str(p))
+for tool in ['clang', 'clang++', 'codesign', 'xcodebuild', 'glslangValidator', 'glslc',
+             'spirv-val', 'cmake', 'ninja', 'cargo', 'llvm-as']:
+    require(shutil.which(tool) is not None, 'Missing real build tool ' + tool)
+cargo_version = read(['cargo', '--version'])
+rust_version = read(['rustc', '--version'])
+installed_targets = read(['rustup', 'target', 'list', '--installed', '--toolchain', '1.98.0']).splitlines()
+require(cargo_version.startswith('cargo 1.98.0 '), 'Wrong effective Cargo toolchain')
+require(rust_version.startswith('rustc 1.98.0 '), 'Wrong effective rustc toolchain')
+require('aarch64-apple-ios' in installed_targets, 'iOS standard library target missing')
+llvm_version = read(['llvm-as', '--version'])
+import re
+require(int(re.search(r'(?:LLVM version|version)\s+(\d+)', llvm_version)[1]) >= 21, 'LLVM21+ required')
+
+# A real cross-link and byte-level signature check fails before long compilation.
+probe_dir = root / 'build/ci-sdk-probe'
+probe_dir.mkdir(parents=True)
+(probe_dir / 'probe.c').write_text('int main(void) { return 0; }\n')
+run(['xcrun', 'clang', '-target', 'arm64-apple-ios17.0', '-isysroot', sdk,
+     probe_dir / 'probe.c', '-o', probe_dir / 'probe'], 'real-sdk-link', 60)
+run(['codesign', '--force', '--sign', '-', '--pagesize', '4096',
+     probe_dir / 'probe'], 'real-sdk-sign', 30)
+probe_identity = check(probe_dir / 'probe', 2)
+
+selected = ['drivers/Adreno740', 'drivers/AdrenoMetal', 'kits/AdrenoPM4', 'kits/ArmSmmu4K']
+run(['git', 'submodule', 'update', '--init', '--recursive', '--', *selected],
+    'exact-component-checkouts', 600)
+gitlinks = {}
+for p in selected:
+    row = read(['git', 'ls-tree', 'HEAD', p]).split()
+    expected = row[2]
+    actual = read(['git', 'rev-parse', 'HEAD'], root / p)
+    require(row[0] == '160000' and actual == expected, 'Submodule gitlink mismatch ' + p)
+    require(read(['git', 'status', '--porcelain'], root / p) == '', 'Dirty component ' + p)
+    gitlinks[p] = actual
+
+# Assemble only the device host compiler/probe input, keeping producer sources intact.
+source = device / 'scripts/build-adreno-compiler-host.py'
+target = root / 'scripts/build-adreno-compiler-host.py'
+require(not target.exists(), 'Unexpected existing device compiler script')
+shutil.copy2(source, target)
+require(not (root / 'kits/sheng').exists(), 'Unexpected pre-existing board package')
+shutil.copytree(device / 'package', root / 'kits/sheng')
+overlays = {'scripts/build-adreno-compiler-host.py': sha(target)}
+compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
+translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
+require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
+require(translator_inputs['translator']['commit'] == TRANSLATOR, 'Wrong translator pin')
+run([sys.executable, 'scripts/build-adreno-compiler-host.py'], 'prepare-mesa-host-tools', 1800)
+require(read(['git', 'rev-parse', 'HEAD'], root / '.cache/mesa-work') == MESA, 'Mesa pin differs')
+
+m2v = root / '.cache/gpu-reference/metal2vulkan'
+require(not m2v.exists(), 'Fresh source-only translator required')
+m2v.parent.mkdir(parents=True, exist_ok=True)
+run(['git', 'init', m2v], 'translator-init', 30)
+run(['git', '-C', m2v, 'remote', 'add', 'origin',
+     translator_inputs['translator']['repository']], 'translator-origin', 30)
+run(['git', '-C', m2v, 'fetch', '--depth=1', '--filter=blob:none', 'origin', TRANSLATOR],
+    'translator-exact-fetch', 600)
+run(['git', '-C', m2v, 'checkout', '--detach', 'FETCH_HEAD'], 'translator-checkout', 60)
+require(read(['git', 'rev-parse', 'HEAD'], m2v) == TRANSLATOR, 'Translator pin differs')
+run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'host'],
+    'turnip-host', 1800)
+
+# The original replay generator needs the host software peer. Its default whole
+# qualification script also needs original QuartzCore.metallib, which is deliberately
+# absent here. Execute ONLY the exact pinned build prefix; no test-suite PASS claim.
+peer_source = root / 'scripts/check-turnip-darwin-host.py'
+expected_blob = '57d153282f45b0410870d5022870cb2d317ae74c'
+require(read(['git', 'hash-object', peer_source]) == expected_blob, 'Host peer source changed')
+marker = "\nenv = dict(os.environ, DYLD_INSERT_LIBRARIES=str(shim), MESA_LOG='')\n"
+text = peer_source.read_text()
+require(text.count(marker) == 1, 'Pinned host-peer split marker changed')
+prefix = text.split(marker, 1)[0]
+prefix_file = root / 'build/ci-host-replay-peer-prefix.py'
+prefix_file.write_text(prefix)
+# __file__ must stay at scripts/ level because the unmodified prefix computes ROOT.
+wrapper = root / 'build/ci-host-replay-peer-wrapper.py'
+wrapper.write_text("import runpy\nfrom pathlib import Path\np=Path(" + repr(str(peer_source)) +
+                   ")\nscope={'__file__':str(p),'__name__':'__ci_host_peer_build_only__'}\n" +
+                   "exec(compile(" + repr(prefix) + ",str(p),'exec'),scope)\n")
+run([sys.executable, wrapper], 'host-replay-peer-build-only', 600)
+require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Host replay peer missing')
+run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'ios'],
+    'turnip-ios17', 1800)
+run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
+    'plugin-ios17', 2400)
+producer = root / 'build/adreno-metal-plugin'
+bundle = producer / 'NativeAdrenoMetal.bundle'
+trust = json.loads((producer / 'trust.json').read_text())
+identities = {
+    'plugin': check(bundle / 'NativeAdrenoMetal', 8),
+    'turnip': check(bundle / 'libvulkan_freedreno.dylib', 6),
+    'probe_daemon': check(producer / 'adrenoprobed', 2),
+}
+for key, field in [('plugin', 'cdhash'), ('turnip', 'turnip_cdhash'), ('probe_daemon', 'daemon_cdhash')]:
+    require(identities[key]['cdhash'] == trust[field], 'trust.json CDHash mismatch ' + key)
+# Bundle resource seal in addition to Mach-O CodeDirectory page hashes.
+run(['codesign', '--verify', '--strict', bundle], 'bundle-resource-seal', 30)
+for p in producer.rglob('*'):
+    require(not p.is_symlink(), 'Unexpected output symlink')
+parts = output / 'components'
+parts.mkdir()
+shutil.copytree(bundle, parts / bundle.name)
+shutil.copy2(producer / 'trust.json', parts / 'trust.json')
+shutil.copy2(producer / 'adrenoprobed', parts / 'adrenoprobed')
+for p in producer.glob('*.plist'):
+    shutil.copy2(p, parts / p.name)
+bridge = root / 'build/adreno-metal-bridge/ios/libadreno_metal_bridge.a'
+require(bridge.is_file() and bridge.stat().st_size > 4096, 'Missing real bridge archive')
+shutil.copy2(bridge, parts / bridge.name)
+lock = root / 'build/adreno-metal-bridge/Cargo.lock'
+require(lock.is_file(), 'Actual resolved Cargo.lock missing')
+shutil.copy2(lock, output / 'Cargo.lock')
+(output / 'mesa-requirements.txt').write_text((root / 'scripts/requirements-adreno-compiler.txt').read_text())
+for p in list((root / '.cache').glob('*.log')) + list((root / 'build/adreno-metal-bridge').glob('*.log')):
+    if p.stat().st_size <= 32 * 1024**2:
+        shutil.copy2(p, logs / ('producer-' + p.name))
+require(sum(p.stat().st_size for p in output.rglob('*') if p.is_file()) <= 2 * 1024**3,
+        'Candidate artifact exceeds2GiB bound')
+output_hashes = {str(p.relative_to(output)): dict(bytes=p.stat().st_size, sha256=sha(p))
+                 for p in sorted(output.rglob('*')) if p.is_file()}
+manifest = dict(
+    status='CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY',
+    qualification='REQUIRED_PENDING_ORIGINAL_INPUT',
+    original_input_qualification=dict(
+        required_library='iPadOS17.7.11-21H461 QuartzCore/default.metallib',
+        sha256='606f913adf520420f9b4bb666efb782a68c830f082f1e559e17b20d0d13adbc9',
+        required_suite='scripts/check-quartzcore-turnip-cache-host.py',
+        additional_suite='scripts/check-priming-cache-host.py',
+        completed=False,
+        reason='No original Apple OS input is fetched/uploaded by this source-only job'),
+    exact_sources=dict(UniXNU=MAIN, device=DEVICE, components=gitlinks, Mesa=MESA,
+                       translator=TRANSLATOR, overlays=overlays),
+    source_split=dict(original_script_blob=expected_blob,
+        prefix_sha256=hashlib.sha256(prefix.encode()).hexdigest(),
+        mode='host software peer compilation only; original complete suite NOT run',
+        plugin_Turnip_bridge_sources_modified=False),
+    toolchain=dict(platform=platform.platform(), sdk=str(sdk),
+        sdk_version=read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-version']),
+        sdk_settings_sha256=sha(sdk / 'SDKSettings.plist'),
+        macos_sdk=str(macsdk), xcode=read(['xcodebuild', '-version']),
+        llvm=llvm_version, rust=rust_version, cargo=cargo_version, rustup_toolchain=env['RUSTUP_TOOLCHAIN'],
+        rust_installed_targets=installed_targets, LLVM_CONFIG_PATH_required=False,
+        brew=read(['brew', 'list', '--versions', 'llvm', 'ninja', 'cmake', 'glslang',
+                   'shaderc', 'spirv-tools', 'vulkan-headers', 'bison', 'pkgconf', 'rustup']),
+        cargo_lock_sha256=sha(lock),
+        real_signature_probe=probe_identity,
+        concurrency=dict(cargo_jobs=1, real_ninja=real_ninja, real_make=real_make,
+                         adapter_max_jobs=2)),
+    binaries=identities, outputs=output_hashes,
+    no_device_seed_private_key_or_OS_images=True,
+    hardware_GPU_execution_verified=False,
+    created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat())
+(output / 'input-output-manifest.json').write_text(json.dumps(manifest, indent=2))
+(output / 'REQUIRED_PENDING_ORIGINAL_INPUT.txt').write_text(
+    'CANDIDATE ONLY. Complete original-input and physical GPU qualification before installation.\n')
+print(json.dumps(dict(status=manifest['status'], qualification=manifest['qualification'],
+                     binaries=identities), indent=2))

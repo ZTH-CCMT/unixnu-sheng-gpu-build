@@ -1,0 +1,51 @@
+{
+  "source_commit": "6790e7ce6e77f67a9174fba1255e64eacf1c41ad",
+  "device_commit": "28b30285768e04008ac525c04182e245bfac441e",
+  "selected_components": [
+    "drivers/Adreno740",
+    "drivers/AdrenoMetal",
+    "kits/AdrenoPM4",
+    "kits/ArmSmmu4K"
+  ],
+  "component_commit_rule": "exact gitlinks checked at runtime, not main",
+  "mesa_commit": "85fda3b36405bcaea8bffc64aa4f2651dc90770d",
+  "mesa_tree": "b72ff1eb2138026ed6aba524770899faabf7d7c8",
+  "metal2vulkan_commit": "624bab3918de5b978e1101517abca2b4fa426565",
+  "rust_toolchain": "1.98.0",
+  "rust_target": "aarch64-apple-ios",
+  "cargo_jobs": 1,
+  "real_ninja_and_make_max_jobs": 2,
+  "runner": "macos-26 arm64",
+  "job_timeout_minutes": 120,
+  "min_free_GiB_after_tools": 8,
+  "runner_memory_qualification": "Not remotely tested; standard small ARM64 memory may be insufficient for LTO",
+  "llvm_requirement": ">=21",
+  "python_requirements": [
+    "meson==1.9.1",
+    "Mako==1.3.10",
+    "MarkupSafe==3.0.4",
+    "packaging==25.0",
+    "PyYAML==6.0.3",
+    "ply==3.11"
+  ],
+  "host_SDK": "real macOS SDK for software peer",
+  "target_SDK": "real iPhoneOS SDK, iOS17 target",
+  "brew_tools": [
+    "llvm",
+    "ninja",
+    "cmake",
+    "glslang",
+    "shaderc",
+    "spirv-tools",
+    "bison",
+    "pkgconf",
+    "rustup",
+    "vulkan-headers"
+  ],
+  "dependency_versions_fully_deterministic": false,
+  "resolved_Cargo_lock": "saved by actual run; no remote run performed",
+  "qualification_gate": "REQUIRED_PENDING_ORIGINAL_INPUT",
+  "RUSTUP_TOOLCHAIN": "1.98.0",
+  "LLVM_CONFIG_PATH_required": false,
+  "LLVM_use": "llvm-as assembles source fixtures; pinned metal2vulkan-air is a native Rust reader, no LLVM runtime native dependency"
+}
