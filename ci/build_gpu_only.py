@@ -1,5 +1,5 @@
 """Build source-pinned candidate GPU components on real macOS; never install."""
-import argparse, datetime, hashlib, json, os, platform, shutil, subprocess, sys
+import argparse, datetime, hashlib, json, os, platform, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from verify_gpu_artifacts import check, require
 
@@ -22,10 +22,27 @@ require(shutil.disk_usage(root).free  >= 8 * 1024**3, 'At least8GiB free after t
 env = dict(os.environ, CARGO_BUILD_JOBS='1', RUSTUP_TOOLCHAIN='1.98.0', PYTHONDONTWRITEBYTECODE='1')
 
 def run(argv, name, timeout=1800, cwd=root):
-    with (logs / (name + '.log')).open('wb') as stream:
-        r = subprocess.run(list(map(str, argv)), cwd=cwd, env=env,
-                           stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
-    require(r.returncode == 0, 'Failed phase ' + name + '; see bounded artifact logs')
+    started = time.monotonic()
+    stopped = threading.Event()
+    def progress():
+        while not stopped.wait(30):
+            print(json.dumps(dict(phase=name, state='running', elapsed_seconds=int(time.monotonic()-started))), flush=True)
+    print(json.dumps(dict(phase=name, state='started', timeout_seconds=timeout)), flush=True)
+    reporter = threading.Thread(target=progress, daemon=True)
+    reporter.start()
+    try:
+        with (logs / (name + '.log')).open('wb') as stream:
+            r = subprocess.run(list(map(str, argv)), cwd=cwd, env=env,
+                               stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
+        print(json.dumps(dict(phase=name, state='completed', exit_code=r.returncode,
+                              elapsed_seconds=round(time.monotonic()-started, 3))), flush=True)
+        require(r.returncode == 0, 'Failed phase ' + name + '; see bounded artifact logs')
+    except BaseException:
+        print(json.dumps(dict(phase=name, state='failed', elapsed_seconds=round(time.monotonic()-started, 3))), flush=True)
+        raise
+    finally:
+        stopped.set()
+        reporter.join(timeout=1)
 
 def read(argv, cwd=root):
     return subprocess.check_output(list(map(str, argv)), cwd=cwd, env=env,
@@ -99,6 +116,26 @@ shutil.copy2(source, target)
 require(not (root / 'kits/sheng').exists(), 'Unexpected pre-existing board package')
 shutil.copytree(device / 'package', root / 'kits/sheng')
 overlays = {'scripts/build-adreno-compiler-host.py': sha(target)}
+# The pinned host-only fixture predates APIs now used by the pinned driver.
+# Hash-bound test doubles only: production kernel/plugin/Turnip/bridge stay unmodified.
+fixture = root / 'drivers/Adreno740/tests/XnuMemoryFixture.h'
+fixture_before = 'e316a1d4606c2fa52671fb15855f1d76e2cfd827f6d91f950aaf6452d596b04e'
+fixture_after = '18015ab4e9bc6a276b7c5aaf09571ba84e6d5936ede5f419a211c6dbb808f55f'
+fixture_overlay = Path(__file__).resolve().parent / 'host-XnuMemoryFixture.h'
+require(sha(fixture) == fixture_before, 'Pinned host fixture changed')
+require(sha(fixture_overlay) == fixture_after, 'Unreviewed host fixture overlay')
+fixture.write_bytes(fixture_overlay.read_bytes())
+host_private = root / 'build/turnip-darwin-host/host-include/sys/resource_private.h'
+require(not host_private.exists(), 'Fresh host private-header shim required')
+private_overlay = Path(__file__).resolve().parent / 'host-resource-private.h'
+private_sha = 'fb9dd31b1b0a82c7bc64223a8a475d1408b661fd1a3efdcca62930a5aa802292'
+require(sha(private_overlay) == private_sha, 'Unreviewed host role-constant fixture')
+host_private.parent.mkdir(parents=True, exist_ok=True)
+host_private.write_bytes(private_overlay.read_bytes())
+overlays['drivers/Adreno740/tests/XnuMemoryFixture.h'] = sha(fixture)
+overlays['build/turnip-darwin-host/host-include/sys/resource_private.h'] = sha(host_private)
+print(json.dumps(dict(phase='host-fixture-compatibility', original_sha256=fixture_before,
+                     patched_sha256=sha(fixture), scope='host test fixture only')), flush=True)
 compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
 translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
 require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
@@ -192,6 +229,8 @@ manifest = dict(
     source_split=dict(original_script_blob=expected_blob,
         prefix_sha256=hashlib.sha256(prefix.encode()).hexdigest(),
         mode='host software peer compilation only; original complete suite NOT run',
+        host_fixture_compatibility=dict(original_sha256=fixture_before, patched_sha256=sha(fixture),
+            role_constants_sha256=sha(host_private), default_role='explicit host unmanaged; not real OS task role'),
         plugin_Turnip_bridge_sources_modified=False),
     toolchain=dict(platform=platform.platform(), sdk=str(sdk),
         sdk_version=read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-version']),

@@ -1,12 +1,12 @@
 # UniXNU OS17 GPU component build plan
 
-This is a reviewable, **not yet remotely executed** workflow. It builds candidate user-space GPU components; it does not boot or install them.
+This revision repairs the pinned host simulator fixture after the first cloud attempt failed. It builds candidate user-space GPU components; it does not boot or install them or claim a verified installation.
 
 ## Files and placement
 
-Copy `unixnu-gpu-only.yml` to `.github/workflows/unixnu-gpu-only.yml` in the approved dedicated repository, and copy `build_gpu_only.py` plus `verify_gpu_artifacts.py` to `ci/`. The repository needs no device secret. The manual dispatch has no free-form shell, source-ref, seed, or signing-key input.
+Copy `unixnu-gpu-only.yml` to `.github/workflows/unixnu-gpu-only.yml` in the approved dedicated repository, and copy `build_gpu_only.py`, `verify_gpu_artifacts.py`, `host-XnuMemoryFixture.h` and `host-resource-private.h` to `ci/`. The repository needs no device secret. The manual dispatch has no free-form shell, source-ref, seed, or signing-key input.
 
-No repository has been created, no files uploaded, and no workflow triggered by this plan.
+The first run (41422620304, commit38429792398b499d2594b3284123022d31524fd9) passed real SDK/signature preflight, compiler vectors and host Turnip build, then failed because the pinned host fixture omitted IOFree. This revision preserves production driver, plugin, Turnip and bridge source pins.
 
 ## Exact inputs
 
@@ -22,7 +22,7 @@ No repository has been created, no files uploaded, and no workflow triggered by 
 
 Job timeout120minutes; Cargo one build job; RUSTUP_TOOLCHAIN=1.98.0 is explicit, and actual bare cargo/rustc versions plus the installed iOS target are checked. Private resource adapters invoke the real Ninja/make with a final `-j2`; these do not impersonate SDK, clang, or codesign and are recorded. At least8GiB must remain free after installing tools. Insufficient space stops the job; it never deletes Xcode.
 
-A provisional planning allowance is30–90minutes, up to the120minute cap. This has not run; first source downloads, Rust LTO and runner queueing can change it. Qualification on the standard small ARM64 runner's available RAM remains unknown. Repository visibility, account allowance and billing must be approved separately; this plan promises no private-runner free quota.
+A provisional planning allowance is30-90minutes, up to the120minute cap. Source downloads, Rust LTO and runner queueing affect actual duration. Completing the full pipeline on the standard small ARM64 runner remains a qualification requirement. This workflow uses the approved dedicated public repository and standard runner; it claims no private or paid larger-runner allowance.
 
 ## Real SDK/signature gates
 
@@ -71,4 +71,10 @@ Before installation, the next controlled qualification stage must use the legiti
 - [Pinned replay/host suite](https://github.com/UniXNU/UniXNU/blob/6790e7ce6e77f67a9174fba1255e64eacf1c41ad/scripts/check-turnip-darwin-host.py)
 - [Original-input suite](https://github.com/UniXNU/UniXNU-sheng/blob/28b30285768e04008ac525c04182e245bfac441e/scripts/check-quartzcore-turnip-cache-host.py)
 
-Existing official Actions research found no current exact sheng GPU component artifact to download. The only old successful macOS run reviewed was for uke; current sheng package workflow had no runs. This dedicated workflow therefore remains an unexecuted route, not a repackaged verified author binary.
+Source comparison did not find an exact author-published sheng GPU component artifact to download. This dedicated workflow repairs the host fixture after a failed first run and produces candidate components; it does not repackage or claim a verified author installation.
+
+## Pinned host fixture repair
+
+Only tests/XnuMemoryFixture.h is overlaid, guarded by exact before/after hashes; a generated host include supplies two Apple GPU-role constants. The fixture uses calloc/free and an explicit controllable host task role. It does not implement or impersonate SDK/signing tools, alter production driver/ABI, or claim physical GPU scheduling. CI records the overlay hashes; all original full-qualification and physical-GPU gates remain pending. Local genuine Linux syntax checks covered the original nine shared core sources and host_gpu_service, plus allocation/free and role primitive execution; these checks do not establish Darwin linking, full host-qualification success or physical GPU behavior.
+
+The helper now reports each phase start/completion and a 30-second running heartbeat while preserving the original subprocess timeout.

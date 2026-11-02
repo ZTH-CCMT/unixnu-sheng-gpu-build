@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   gpu-components:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Run first approved UniXNU OS17 GPU component build 20261102'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Fix host fixture and resume UniXNU OS17 GPU build 20261102'
     runs-on: macos-26
     timeout-minutes: 120
     env:
