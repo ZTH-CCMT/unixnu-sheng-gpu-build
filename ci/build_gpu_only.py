@@ -1,8 +1,9 @@
-"""Future V4 hostfix: signed GPU components plus full real host qualification; never install."""
+"""Explicit authenticated C6 host-build reuse and reviewed Q layout; full controls and real iOS components; never install."""
 import argparse, datetime, hashlib, json, os, platform, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from verify_gpu_artifacts import check, require
 from qualify_gpu_host import matching_original_input, qualify_author_host
+from reuse_frozen_host import prepare_frozen_host, setup_source_tools_and_revalidate_IR3, verify_reused_host_inputs, reviewed_Q_adapter_record
 
 MAIN = '6790e7ce6e77f67a9174fba1255e64eacf1c41ad'
 DEVICE = '28b30285768e04008ac525c04182e245bfac441e'
@@ -12,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--root', type=Path, required=True)
 parser.add_argument('--device', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--source-plan', type=Path, required=True)
 a = parser.parse_args()
 root, device, output = a.root.resolve(), a.device.resolve(), a.output.resolve()
 require(platform.system() == 'Darwin' and platform.machine() == 'arm64', 'Real ARM64 macOS runner required')
@@ -20,7 +22,10 @@ output.mkdir(parents=True)
 logs = output / 'logs'
 logs.mkdir()
 require(shutil.disk_usage(root).free  >= 8 * 1024**3, 'At least8GiB free after tools required')
+artifact_token = os.environ.pop('GH_ARTIFACT_TOKEN', None)
 env = dict(os.environ, CARGO_BUILD_JOBS='1', RUSTUP_TOOLCHAIN='1.98.0', PYTHONDONTWRITEBYTECODE='1')
+for credential_name in ['GH_ARTIFACT_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN']:
+    env.pop(credential_name, None)
 
 def run(argv, name, timeout=1800, cwd=root):
     started = time.monotonic()
@@ -169,7 +174,12 @@ compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json')
 translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
 require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
 require(translator_inputs['translator']['commit'] == TRANSLATOR, 'Wrong translator pin')
-run([sys.executable, 'scripts/build-adreno-compiler-host.py'], 'prepare-mesa-host-tools', 1800)
+require(artifact_token is not None, 'Fixed C6 artifact token missing')
+# No generic build subprocess inherits the read-only API token.
+receipt_env = dict(env, GH_ARTIFACT_TOKEN=artifact_token)
+host_reuse, host_reuse_policy = prepare_frozen_host(root, a.source_plan.resolve(), logs, receipt_env)
+artifact_token = None
+setup_source_tools_and_revalidate_IR3(root, logs, run, env, host_reuse, host_reuse_policy)
 require(read(['git', 'rev-parse', 'HEAD'], root / '.cache/mesa-work') == MESA, 'Mesa pin differs')
 
 m2v = root / '.cache/gpu-reference/metal2vulkan'
@@ -182,12 +192,15 @@ run(['git', '-C', m2v, 'fetch', '--depth=1', '--filter=blob:none', 'origin', TRA
     'translator-exact-fetch', 600)
 run(['git', '-C', m2v, 'checkout', '--detach', 'FETCH_HEAD'], 'translator-checkout', 60)
 require(read(['git', 'rev-parse', 'HEAD'], m2v) == TRANSLATOR, 'Translator pin differs')
-run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'host'],
-    'turnip-host', 1800)
+# Author-supported preparation validates exact24patch source/tree and writes
+# public fixture AIR/manifest, then exits before Cargo. Host archive is reused.
+run([sys.executable, 'scripts/build-adreno-metal-bridge.py', '--target', 'host', '--manifest-only'],
+    'bridge-host-source-manifest-only', 180)
+verify_reused_host_inputs(root, host_reuse)
 
-# Full original commands replace the prior build-prefix surrogate.
+# All complete host control commands execute; only authenticated host-build production is reused.
 with matching_original_input(root, logs) as original_input:
-    host_qualification = qualify_author_host(root, device, logs, run)
+    host_qualification = qualify_author_host(root, device, logs, run, host_reuse)
 require(original_input['cleanup_completed'], 'Owned original-input cleanup must complete')
 overlays['scripts/check-quartzcore-turnip-cache-host.py'] = host_qualification['checker_sources']['check-quartzcore-turnip-cache-host.py']
 require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Qualified host replay peer missing')
@@ -195,6 +208,7 @@ run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'ios'],
     'turnip-ios17', 1800)
 run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
     'plugin-ios17', 2400)
+verify_reused_host_inputs(root, host_reuse, allow_rebuilt_peer=True)
 producer = root / 'build/adreno-metal-plugin'
 bundle = producer / 'NativeAdrenoMetal.bundle'
 trust = json.loads((producer / 'trust.json').read_text())
@@ -258,19 +272,28 @@ output_hashes = {str(p.relative_to(output)): dict(bytes=p.stat().st_size, sha256
                  for p in sorted(output.rglob('*')) if p.is_file()}
 manifest = dict(
     status='CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY',
-    schema='unixnu.gpu-components.v4-host-qualified',
-    qualification='FULL_AUTHOR_HOST_SOFTWARE_PASS_PHYSICAL_GPU_PENDING',
+    schema='unixnu.gpu-components.v5-host-reuse-reviewed-q-layout',
+    qualification='FULL_HOST_CONTROLS_PASS_REVIEWED_Q_CACHE_LAYOUT_PHYSICAL_GPU_PENDING',
     host_software_qualification=dict(completed=True, status='PASS', details=host_qualification),
     original_input_qualification=dict(
         required_library='iPadOS17.7.11-21H461 QuartzCore/default.metallib',
         sha256='606f913adf520420f9b4bb666efb782a68c830f082f1e559e17b20d0d13adbc9',
         required_suite='scripts/check-quartzcore-turnip-cache-host.py',
         additional_suite='scripts/check-priming-cache-host.py',
-        completed=True, provenance=original_input, original_Apple_input_uploaded=False),
+        completed=True, provenance=original_input, original_Apple_input_uploaded=False,
+        Q_checker_original_sha256=reviewed_Q_adapter_record()['original_sha256'],
+        Q_checker_actual_sha256=reviewed_Q_adapter_record()['patched_sha256'],
+        Q_checker_original_byte_identity=False),
     exact_sources=dict(UniXNU=MAIN, device=DEVICE, components=gitlinks, Mesa=MESA,
                        translator=TRANSLATOR, overlays=overlays),
-    source_split=dict(mode='original complete host suite plus preserved original-input controls',
-        build_prefix_substitution=False,
+    source_split=dict(mode='complete host controls with authenticated C6 host build reuse and reviewed Q cache layout adapter',
+        build_prefix_substitution=True,
+        build_prefix_substitution_scope='cached host compilation/provisioning only; no control-suite command omitted',
+        test_suite_prefix_substitution=False,
+        whole_host_suite=dict(sha256=host_qualification['host_suite_patched_sha256'], executed=True,
+                             all_control_commands_retained=True),
+        q_cache_layout_adapter=reviewed_Q_adapter_record(),
+        host_build_reuse=host_reuse,
         replay_diagnostics=dict(original_sha256=replay_before, patched_sha256=sha(replay_source),
             original_runtime_call_environment_timeout_and_RD_criteria_unchanged=True),
         hostsim_VA_configuration_only=True,
@@ -300,6 +323,6 @@ manifest = dict(
     created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat())
 (output / 'input-output-manifest.json').write_text(json.dumps(manifest, indent=2))
 (output / 'REQUIRED_PENDING_PHYSICAL_GPU_QUALIFICATION.txt').write_text(
-    'CANDIDATE ONLY. Full host software controls passed; physical GPU and installation qualification remain required.\n')
+    'CANDIDATE ONLY. Full host controls passed with the reviewed Q cache-layout adapter and authenticated C6 host-build reuse; physical GPU and installation qualification remain required.\n')
 print(json.dumps(dict(status=manifest['status'], qualification=manifest['qualification'],
                      binaries=identities), indent=2))

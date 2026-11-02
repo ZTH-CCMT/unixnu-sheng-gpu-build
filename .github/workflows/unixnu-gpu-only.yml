@@ -1,4 +1,4 @@
-name: UniXNU OS17 GPU components and full host qualification
+name: UniXNU OS17 GPU with explicit C6 host reuse and reviewed Q layout
 on:
   workflow_dispatch:
   push:
@@ -6,12 +6,13 @@ on:
     paths: [".github/workflows/unixnu-gpu-only.yml"]
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: unixnu-os17-gpu-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gpu-components:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build UniXNU OS17 GPU with verified host VA layout and full host qualification 20261102'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build UniXNU OS17 GPU with authenticated C6 host reuse and reviewed Q cache layout 20261102'
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -24,6 +25,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: plan
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 7af1cc59c8241393e381ddafe20590d47e9db53d
+          path: source-c6
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -49,8 +55,10 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           "$(brew --prefix rustup)/bin/rustup" toolchain install 1.98.0 --profile minimal
           "$(brew --prefix rustup)/bin/rustup" target add --toolchain 1.98.0 aarch64-apple-ios
-      - name: Build, sign and qualify real host software
-        run: python3 plan/ci/build_gpu_only.py --root upstream --device device --output component-artifact
+      - name: Revalidate frozen host inputs, run all controls, build and sign actual iOS components
+        env:
+          GH_ARTIFACT_TOKEN: ${{ github.token }}
+        run: python3 plan/ci/build_gpu_only.py --root upstream --device device --output component-artifact --source-plan source-c6
       - name: Upload self-built candidate components
         if: success()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

@@ -1,4 +1,4 @@
-"""Future-only real macOS host qualification; imports perform no I/O.
+"""Real macOS full controls with explicit reviewed Q layout and authenticated host-build reuse; imports perform no I/O.
 
 Apple input is fetched directly from the fixed official source into a private
 ephemeral directory, never uploaded. Derived cache/archive bytes stay outside
@@ -42,7 +42,7 @@ MAX_TRANSFER_BYTES = ENCODED_SIZE + (64 << 20)
 IPSW_PY_SHA256 = "29f22e2ac422bf890b64cd2dc5ed4bd508fb902498ea9aeb8bc6e4efcd7ff273"
 CHECKER_SHA256 = {
     "check-turnip-darwin-host.py": "29a805edbf1905112029d7e0adca8668fa6781265a03f571f1760a566fe7732b",
-    "check-quartzcore-turnip-cache-host.py": "eae106179803091de6d065a57fd9af737184d1bae90927313255521c84fcc311",
+    "check-quartzcore-turnip-cache-host.py": "1f93320b33829370e39cf8b60f7cf8fbca130f1dad0a6ac8fe39c62bbcb4ffed",
     "check-priming-cache-host.py": "825c471b2b095ccd2d0c6203e8199ab59ce9769f836aa75f433e137aa6be7422",
 }
 TEST_FREE = 5 * 1024**3 + 256 * 1024**2
@@ -354,21 +354,34 @@ def matching_original_input(root, logs):
             (logs / "original-input-provenance.json").write_text(json.dumps(record, indent=2) + "\n")
 
 
-def qualify_author_host(root, device, logs, run):
+def qualify_author_host(root, device, logs, run, host_reuse):
     source = device / "scripts/check-quartzcore-turnip-cache-host.py"
     target = root / "scripts/check-quartzcore-turnip-cache-host.py"
     require(not target.exists() and not target.is_symlink(),
             "Do not overwrite an existing device qualification overlay")
-    require(sha(source) == CHECKER_SHA256[source.name], "Wrong device checker source")
-    shutil.copy2(source, target)
+    require(sha(source) == "eae106179803091de6d065a57fd9af737184d1bae90927313255521c84fcc311", "Wrong original device checker source")
+    adapter = Path(__file__).with_name("reviewed-quartzcore-cache-layout.py")
+    require(sha(adapter) == CHECKER_SHA256[source.name], "Unreviewed Q cache layout adapter")
+    shutil.copy2(adapter, target)
     checker_sources = {}
     for name, expected in CHECKER_SHA256.items():
         checker = root / "scripts" / name
         require(sha(checker) == expected, "Wrong exact author checker: " + name)
         checker_sources[name] = expected
     require(shutil.disk_usage(root).free > TEST_FREE, "Preserve author test free-space bound")
-    run([sys.executable, "scripts/build-adreno-metal-bridge.py", "--target", "host"],
-        "bridge-host", 2400)
+    from reuse_frozen_host import verify_reused_host_inputs
+    verify_reused_host_inputs(root, host_reuse)
+    require(host_reuse["host_bridge_built_in_this_run"] is False, "Host reuse mode must remain explicit")
+    bridge_key = "public-build/build/adreno-metal-bridge/host/libadreno_metal_bridge.a"
+    mesa_key = "public-build/build/mesa-tu/src/freedreno/vulkan/libvulkan_freedreno.dylib"
+    peer_key = "public-build/build/turnip-darwin-host/libhostiokit.dylib"
+    bridge_sha = host_reuse["required_inputs"][bridge_key]["sha256"]
+    runtime_before = sha(root / "build/turnip-darwin-host/libhostiokit.dylib")
+    require(runtime_before == host_reuse["required_inputs"][peer_key]["sha256"], "Initial recovered host runtime differs")
+    (logs / "bridge-host-reused.json").write_text(json.dumps(dict(
+        status="AUTHENTICATED_C6_HOST_ARCHIVE_REUSED_NOT_REBUILT",
+        sha256=bridge_sha, source_provenance=host_reuse["provenance"],
+        host_bridge_built_in_this_run=False), indent=2) + "\n")
     require(shutil.disk_usage(root).free > TEST_FREE, "Preserve free space after host bridge")
     # Genuine full suite: smoke, deferred BO controls, pipeline caches,
     # original QuartzCore and priming, plugin sequence and watchdog.
@@ -405,7 +418,24 @@ def qualify_author_host(root, device, logs, run):
                          (ppath, "priming-host-checkpoint.json")]:
         require(source.stat().st_size < 2 << 20, "Bounded qualification report")
         shutil.copy2(source, logs / name)
-    return dict(status="FULL_AUTHOR_HOST_SOFTWARE_QUALIFICATION_PASS",
+    verify_reused_host_inputs(root, host_reuse, allow_rebuilt_peer=True)
+    runtime_after = sha(root / "build/turnip-darwin-host/libhostiokit.dylib")
+    require(q["peer"]["sha256"] == p["peer_sha256"] == runtime_after,
+            "Preserved Q/P did not use the freshly whole-suite-built runtime")
+    require(q["driver"]["sha256"] == p["driver_sha256"] == host_reuse["required_inputs"][mesa_key]["sha256"],
+            "Preserved Q/P host Mesa identity differs")
+    require(q["host_bridge_sha256"] == p["host_bridge_sha256"] == bridge_sha,
+            "Preserved Q/P host bridge identity differs")
+    from reuse_frozen_host import reviewed_Q_adapter_record
+    return dict(status="FULL_HOST_CONTROLS_PASS_REVIEWED_Q_CACHE_LAYOUT",
+                test_suite_prefix_substitution=False,
+                reviewed_Q_cache_layout_adapter=reviewed_Q_adapter_record(),
+                original_Q_checker_executed=False,
+                host_bridge_built_in_this_run=False,
+                host_bridge_reuse_input_sha256=bridge_sha,
+                host_runtime_before_suite_sha256=runtime_before,
+                host_runtime_after_suite_sha256=runtime_after,
+                cached_host_Mesa_sha256=host_reuse["required_inputs"][mesa_key]["sha256"],
                 checker_sources=checker_sources, complete_suite_executed=True,
                 host_suite_original_sha256="7ab580b33aa544a0e8931679884d2aa717e5663d6d9ff52ee5cda90c128862c0",
                 host_suite_patched_sha256=CHECKER_SHA256["check-turnip-darwin-host.py"],

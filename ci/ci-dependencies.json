@@ -1,0 +1,114 @@
+{
+  "source_commit": "6790e7ce6e77f67a9174fba1255e64eacf1c41ad",
+  "device_commit": "28b30285768e04008ac525c04182e245bfac441e",
+  "selected_components": [
+    "drivers/Adreno740",
+    "drivers/AdrenoMetal",
+    "kits/AdrenoPM4",
+    "kits/ArmSmmu4K"
+  ],
+  "component_commit_rule": "exact gitlinks checked at runtime, not main",
+  "mesa_commit": "85fda3b36405bcaea8bffc64aa4f2651dc90770d",
+  "mesa_tree": "b72ff1eb2138026ed6aba524770899faabf7d7c8",
+  "metal2vulkan_commit": "624bab3918de5b978e1101517abca2b4fa426565",
+  "rust_toolchain": "1.98.0",
+  "rust_target": "aarch64-apple-ios",
+  "cargo_jobs": 1,
+  "real_ninja_and_make_max_jobs": 2,
+  "runner": "macos-26 arm64",
+  "job_timeout_minutes": 120,
+  "min_free_GiB_after_tools": 8,
+  "runner_memory_qualification": "C6 actual host archive built successfully; future iOS Rust/LTO remains unmeasured; no new memory tuning.",
+  "llvm_requirement": ">=21",
+  "python_requirements": [
+    "meson==1.9.1",
+    "Mako==1.3.10",
+    "MarkupSafe==3.0.4",
+    "packaging==25.0",
+    "PyYAML==6.0.3",
+    "ply==3.11"
+  ],
+  "host_SDK": "real macOS SDK for software peer",
+  "target_SDK": "real iPhoneOS SDK, iOS17 target",
+  "brew_tools": [
+    "llvm",
+    "ninja",
+    "cmake",
+    "glslang",
+    "shaderc",
+    "spirv-tools",
+    "bison",
+    "pkgconf",
+    "rustup",
+    "vulkan-headers"
+  ],
+  "dependency_versions_fully_deterministic": false,
+  "resolved_Cargo_lock": "Authenticated C6 Cargo.lock305529... restored; exact hash required before and after actual iOS production.",
+  "qualification_gate": "FULL_HOST_CONTROLS_PASS_REVIEWED_Q_CACHE_LAYOUT_PHYSICAL_GPU_PENDING",
+  "RUSTUP_TOOLCHAIN": "1.98.0",
+  "LLVM_CONFIG_PATH_required": false,
+  "LLVM_use": "llvm-as assembles source fixtures; pinned metal2vulkan-air is a native Rust reader, no LLVM runtime native dependency",
+  "plan_version": "C6_HOST_REUSE_REVIEWED_Q_LAYOUT_CANDIDATE_NOT_EXECUTED",
+  "host_fixture_compatibility": {
+    "base_helper_sha256": "617312e9861c0cb0fb9894b9ff2b2911c2c7aabd47c77ff75b33c2a882866539",
+    "fixture_sha256": "18015ab4e9bc6a276b7c5aaf09571ba84e6d5936ede5f419a211c6dbb808f55f",
+    "role_constants_sha256": "fb9dd31b1b0a82c7bc64223a8a475d1408b661fd1a3efdcca62930a5aa802292"
+  },
+  "original_input": {
+    "url": "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw",
+    "member": "044-76034-038.dmg",
+    "decoded_bytes": 3303014400,
+    "encoded_bytes": 1321525120,
+    "archive_bytes": 6835124840,
+    "manifest_sha256": "199fb5de41c26d86c080b4e8e402c40309c5f42e7bda18c210451b09bcb49bf7",
+    "max_response_bytes": 8388608,
+    "max_total_range_body_bytes": 1388633984,
+    "temporary_official_fetch_only": true,
+    "uploaded": false
+  },
+  "test_free_bytes": 5637144576,
+  "host_link_source_repairs": {
+    "check-turnip-darwin-host.before.py": "7ab580b33aa544a0e8931679884d2aa717e5663d6d9ff52ee5cda90c128862c0",
+    "check-turnip-darwin-host.after.py": "29a805edbf1905112029d7e0adca8668fa6781265a03f571f1760a566fe7732b",
+    "host_gpu_service.before.cpp": "4ef75c3cf644cdc3ead973e568a580124dfe3aaf0527c93770d5ac1c1cd7810b",
+    "host_gpu_service.after.cpp": "ffa33ecae11ac485f7aa0339232169afb7206a55206cfe515284ca7052d09e7f"
+  },
+  "link_repair_independent_review": "F source-review/native-author-gpu-ci-hostlink-independent-20261102/review.json",
+  "hostsim_VA_configuration": {
+    "scope": "Host simulator only, production client aperture formula and inputBits guard",
+    "asset_sha256": "ffa33ecae11ac485f7aa0339232169afb7206a55206cfe515284ca7052d09e7f",
+    "warm_AB_run": 41440107606,
+    "warm_AB_commit": "53d31f512404247182f1c694b7dc629a0c9ea3a5",
+    "cached_Mesa_and_smokes_unchanged": true,
+    "physical_GPU_proof": false
+  },
+  "full_qualification_plan_review": "F source-review/native-author-gpu-ci-full-qualification-independent-20261102/review-final.json",
+  "replay_error_logging": {
+    "original_sha256": "d61c46c63835e0da62f9515c7667a2c8ce51d840b55294cee6c72a07ce1cb096",
+    "after_sha256": "f217b7b59a0015f22277eedd856020b024d337ed2e1ce607c2ec47c8938ef6ee",
+    "runtime_and_RD_criteria_unchanged": true
+  },
+  "failure_recovery": {
+    "collector_sha256": "006adb991e8e02f4a6cbfa572178e8dd05781657f0fbddbe2b8c6d2aef11f11b",
+    "source_public_exact_whitelist": true,
+    "max_bytes": 2147483648,
+    "include_hidden_files_only_explicit_collector_output": true,
+    "SDK_OS_RD_or_dependency_trees_uploaded": false
+  },
+  "reviewed_Q_cache_layout_adapter": {
+    "original_sha256": "eae106179803091de6d065a57fd9af737184d1bae90927313255521c84fcc311",
+    "patched_sha256": "1f93320b33829370e39cf8b60f7cf8fbca130f1dad0a6ac8fe39c62bbcb4ffed",
+    "diff_sha256": "6b24fdb77cc861a242ba0bff3eccc20c2d7f3e6b6b33972730805df50064490b",
+    "expected_produce_artifact_misses": 72,
+    "expected_produce_artifact_writes": 48
+  },
+  "host_build_reuse": {
+    "policy_sha256": "24bae8d8418a12cb542e1ebc95e95399c7c921518750b1f5027ed75bcb4c75bb",
+    "host_bridge_built_in_this_run": false,
+    "host_Mesa_built_in_this_run": false,
+    "host_IR3_built_in_this_run": false,
+    "full_host_test_suite_prefix_cut": false,
+    "actual_iOS_production_required": true
+  },
+  "publication_blocker": "Actual C8 adapted Q4 and original P6 success plus independent C9 review remain pending."
+}

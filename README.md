@@ -1,65 +1,17 @@
-# UniXNU OS17 GPU components with full host qualification
+UniXNU v5 完整控制与实际 iOS 组件续建（草稿，等待 C8）
 
-This job builds the real signed iOS17 Adreno Metal plugin, Turnip and bridge and
-runs the complete author host-software controls using the exact matching original
-QuartzCore input. Output remains a candidate: physical GPU, iOS execution and
-installation readiness are separate qualifications.
+这份配置认证复用固定 C6 的 host Rust archive/Mesa/IR3 工具，避免再次编译222MB host桥接库；完整29a host suite、额外Q4/P6、实际iOS Turnip/Rustbridge/plugin和真实签名仍执行。不得把复用步骤记成新build成功，不得声称原eae Q未经修改通过。
 
-The host simulator now advertises the current producer client aperture. Its old
-0x20000000 start overlapped current preemption mappings, producing BoMap Busy
-translated into Vulkan OUT_OF_DEVICE_MEMORY. Warm control run41440107606 held
-cached Mesa and both smoke executables unchanged: baseline failed BoMap Busy;
-changing only the reviewed host configuration made the original replay generator
-pass. This proves the host-model issue under that control, not tablet RAM exhaustion
-or a physical GPU fix. The source uses GpuClientVaStart and the existing (32,48]
-input-width guard/current client-window formula. Production driver/ABI is unchanged.
+发布前硬条件：C8 run41455386223/commit3b5ce10d768edd78da2009c2ae5b03adfc47be5e 中reviewed Q4与original P6实际全部通过；本草稿独立源码审查通过。当前没有该运行通过声明，没有发布或执行本草稿。
 
-Exact inputs remain UniXNU6790e7ce6e77f67a9174fba1255e64eacf1c41ad,
-device28b30285768e04008ac525c04182e245bfac441e, their four component gitlinks,
-Mesa85fda3b36405bcaea8bffc64aa4f2651dc90770d and
-metal2vulkan624bab3918de5b978e1101517abca2b4fa426565. Hash-bound authored host
-fixtures, the missing original Preempt core in the host build list and the host
-clock export are retained. The full host script records its original and effective
-identities separately; its original runtime test logic remains intact.
+主变化：Q仅原eae一处artifact_misses==artifact_writes==72改为固定miss72且write48，绑定1f933适配SHA/6b24 diff和实际C7日志。固定C6源/仓库/运行/ZIP摘要与八项输入逐个SHA验证；真实Mac SDK26.5/Apple compiler/profile/current codesign/SPIRV依赖验证；IR3全部368+12原控制重新执行并记录stdout/stderr字节边界和散列。原C6 host-report不改写为新build。
 
-Matching original input is downloaded transiently from the fixed official Apple
-IPSW using unmodified pinned RangeFile plus reviewed transport restrictions.
-Version/build/product/unique Erase identity, exact BuildManifest hash, member size,
-encoded size, CRC, SHA384/SHA256 and final QuartzCore9670832B/SHA606f... are checked.
-Each HTTP range and response is bounded before reading; a dedicated RuntimeError
-1800s deadline cannot be swallowed by RangeFile retries. The raw APFS image is
-mounted readonly, copied only to an owned test-input tree, detached/rehashed and
-deleted before tests. Inode/path-guarded cleanup removes the staged original input.
+Mesa source/tool setup严格取原device compiler脚本到clean_env定义之前的哈希绑定prefix：准备真实源/11patch/venv固定依赖/Bison3.8.2，停止于任何Mesa configure/ninja前。桥接源使用作者原生--target host --manifest-only检查24patch/tree并生成public AIR/manifest后在Cargo前退出。新iOS目标仍须真正冷构建，不能用Mac archive替代；不承诺总耗时固定。
 
-No prefix-only surrogate is called full qualification. The full author suite,
-fresh preserved QuartzCore4-case controls and priming6-case controls must return
-success and match their actual checkpoint/source identities. PASS metadata follows
-successful original-input cleanup. Self-built iOS binary validation retains real
-SDK linking, actual4KiB SHA256 CodeDirectory pages/CDHash, actual codesign strict
-verification, resource seal and trust.json agreement. Hardware flags remain false.
+完整host suite会重建小hostshim/smokes，之后Q/P身份必须等于新runtime，cached Mesa/hostbridge/IR3/锁仍保持原SHA。原输入传输、只读挂载、owner清理15个函数/类与C6逐字一致。所有原库/SDK/缓存/RD均不上传；失败仅新增固定case/last日志路径。下载错误不序列化URL/请求，GitHub令牌不进入构建子进程。
 
-The replay generator has only a diagnostics wrapper: failure/timeout prints actual
-captured stdout/stderr and rethrows. Commands, environment, timeout, RD parsing
-and all original success criteria remain unchanged. It does not hide a failure.
+v5协议与标记的精确字段见manifest-protocol-shape.json；该文件含$动态占位，只是协议说明。实际候选只有全部控制与iOS生产/4KiB页签名/资源封印/信任CDHash都过才生成v5清单和待实机资格标记。硬件/安装资格始终false。接收器必须用新v5协议及新run/head/artifact绑定。
 
-A failed job separately preserves exact allowlisted public build outputs and own
-logs through collector52cde8..., under2GiB. Its marker is
-ONLY_RECOVERY_NOT_INSTALL_READY; signatures/qualification are not inferred.
-include-hidden-files:true applies only to that explicit collector output so its
-safe .cache__*.log names are retained. No SDK or original Apple OS image/raw/library, RD memory dump,
-shader/cache/archive payload or dependency tree is added to upload paths. Full
-qualification checkpoints contain identities/counters only, not original or
-compiled Apple cache bytes. Successful candidate and recovery artifacts are distinct.
+部署：除manifest-protocol-shape.json、original-input-unchanged-evidence.json和host-reuse-ready-for-review.json等本地证据外，Python/JSON依赖放ci/；unixnu-gpu-full-qualification.yml映射.github/workflows/unixnu-gpu-only.yml；README可保留仓库根。source-c6固定checkout7af1cc59c8241393e381ddafe20590d47e9db53d。仅contents:read/actions:read。
 
-Deployment: unixnu-gpu-full-qualification.yml to
-.github/workflows/unixnu-gpu-only.yml; build_gpu_only.py, qualify_gpu_host.py,
-verify_gpu_artifacts.py, host-XnuMemoryFixture.h, host-resource-private.h,
-host-check-turnip-darwin-host.py, host-host_gpu_service.cpp,
-host-gen-turnip-replay.py and collect_failed_components.py to ci/;
-ci-dependencies.json and this README to repository root.
-
-Manual dispatch and one exact main-push commit gate are retained. All actions are
-existing pinned versions; contents:read only, standard macos26ARM64, Cargo1,
-Ninja/make2, Rust1.98, initial8GiB free, author5.25GiB test reserve, 120minute job,
-2GiB artifact bound and7day retention remain. No paid larger runner, Xcode deletion,
-cache service or skipped qualification is introduced. Review before publishing.
+精确触发消息：Build UniXNU OS17 GPU with authenticated C6 host reuse and reviewed Q cache layout 20261102。根代理独占发布，C8通过前禁止触发。本地未运行构建、测试、CI或设备。

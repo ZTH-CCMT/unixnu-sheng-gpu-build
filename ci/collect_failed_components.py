@@ -59,6 +59,21 @@ PUBLIC_FILES = (
     'build/adreno-metal-plugin/com.apple.bluetoothd.plist',
 )
 PRODUCER_LOGS = (
+    'build/ui-shader-coverage/turnip-graphics/last-produce.log',
+    'build/ui-shader-coverage/turnip-graphics/last-consume.log',
+    'build/ui-shader-coverage/turnip-graphics/last-uuid-miss.log',
+    'build/ui-shader-coverage/turnip-graphics/last-empty-driver.log',
+    'build/ci-preserved-original-qualification/quartzcore/produce.log',
+    'build/ci-preserved-original-qualification/quartzcore/consume.log',
+    'build/ci-preserved-original-qualification/quartzcore/uuid-miss.log',
+    'build/ci-preserved-original-qualification/quartzcore/empty-driver.log',
+    'build/ci-preserved-original-qualification/priming/cold-miss.log',
+    'build/ci-preserved-original-qualification/priming/produce.log',
+    'build/ci-preserved-original-qualification/priming/consume.log',
+    'build/ci-preserved-original-qualification/priming/uuid-miss.log',
+    'build/ci-preserved-original-qualification/priming/truncated-miss.log',
+    'build/ci-preserved-original-qualification/priming/checksum-miss.log',
+
     '.cache/mesa-ir3-configure.log', '.cache/mesa-ir3-build.log',
     '.cache/mesa-ir3-probe-configure.log',
     '.cache/mesa-ir3_disasm-test.log', '.cache/mesa-ir3_delay_test-test.log',
