@@ -1,94 +1,65 @@
-# UniXNU OS17 GPU component build plan
+# UniXNU OS17 GPU components with full host qualification
 
-This revision repairs the pinned host simulator fixture after the first cloud attempt failed. It builds candidate user-space GPU components; it does not boot or install them or claim a verified installation.
+This job builds the real signed iOS17 Adreno Metal plugin, Turnip and bridge and
+runs the complete author host-software controls using the exact matching original
+QuartzCore input. Output remains a candidate: physical GPU, iOS execution and
+installation readiness are separate qualifications.
 
-## Files and placement
+The host simulator now advertises the current producer client aperture. Its old
+0x20000000 start overlapped current preemption mappings, producing BoMap Busy
+translated into Vulkan OUT_OF_DEVICE_MEMORY. Warm control run41440107606 held
+cached Mesa and both smoke executables unchanged: baseline failed BoMap Busy;
+changing only the reviewed host configuration made the original replay generator
+pass. This proves the host-model issue under that control, not tablet RAM exhaustion
+or a physical GPU fix. The source uses GpuClientVaStart and the existing (32,48]
+input-width guard/current client-window formula. Production driver/ABI is unchanged.
 
-Copy `unixnu-gpu-only.yml` to `.github/workflows/unixnu-gpu-only.yml` in the approved dedicated repository, and copy `build_gpu_only.py`, `verify_gpu_artifacts.py`, `host-XnuMemoryFixture.h` and `host-resource-private.h` to `ci/`. The repository needs no device secret. The manual dispatch has no free-form shell, source-ref, seed, or signing-key input.
+Exact inputs remain UniXNU6790e7ce6e77f67a9174fba1255e64eacf1c41ad,
+device28b30285768e04008ac525c04182e245bfac441e, their four component gitlinks,
+Mesa85fda3b36405bcaea8bffc64aa4f2651dc90770d and
+metal2vulkan624bab3918de5b978e1101517abca2b4fa426565. Hash-bound authored host
+fixtures, the missing original Preempt core in the host build list and the host
+clock export are retained. The full host script records its original and effective
+identities separately; its original runtime test logic remains intact.
 
-The first run (41422620304, commit38429792398b499d2594b3284123022d31524fd9) passed real SDK/signature preflight, compiler vectors and host Turnip build, then failed because the pinned host fixture omitted IOFree. This revision preserves production driver, plugin, Turnip and bridge source pins.
+Matching original input is downloaded transiently from the fixed official Apple
+IPSW using unmodified pinned RangeFile plus reviewed transport restrictions.
+Version/build/product/unique Erase identity, exact BuildManifest hash, member size,
+encoded size, CRC, SHA384/SHA256 and final QuartzCore9670832B/SHA606f... are checked.
+Each HTTP range and response is bounded before reading; a dedicated RuntimeError
+1800s deadline cannot be swallowed by RangeFile retries. The raw APFS image is
+mounted readonly, copied only to an owned test-input tree, detached/rehashed and
+deleted before tests. Inode/path-guarded cleanup removes the staged original input.
 
-## Exact inputs
+No prefix-only surrogate is called full qualification. The full author suite,
+fresh preserved QuartzCore4-case controls and priming6-case controls must return
+success and match their actual checkpoint/source identities. PASS metadata follows
+successful original-input cleanup. Self-built iOS binary validation retains real
+SDK linking, actual4KiB SHA256 CodeDirectory pages/CDHash, actual codesign strict
+verification, resource seal and trust.json agreement. Hardware flags remain false.
 
-- UniXNU: `6790e7ce6e77f67a9174fba1255e64eacf1c41ad`.
-- Device policy/probe source: `28b30285768e04008ac525c04182e245bfac441e`.
-- Four components follow that UniXNU commit's gitlinks: Adreno740, AdrenoMetal, AdrenoPM4, ArmSmmu4K. The job checks their actual HEAD against `git ls-tree`; it never uses component main.
-- Mesa: `85fda3b36405bcaea8bffc64aa4f2651dc90770d`, exact recorded patches.
-- metal2vulkan: `624bab3918de5b978e1101517abca2b4fa426565`, exact recorded patches.
-- Real macOS26 ARM64 runner, Xcode's macOS and iPhoneOS SDKs. This matches the author's chosen host family; Intel/macOS15 compatibility is not asserted.
-- LLVM21 or newer (AIR fixture assembly only; the pinned native Rust translator has no llvm-sys/LLVM runtime link and does not need LLVM_CONFIG_PATH), Rust1.98.0 and aarch64-apple-ios target; Mesa Python requirements, Vulkan headers and real Vulkan shader tools. Homebrew tool versions are recorded at execution rather than claimed deterministic here.
+The replay generator has only a diagnostics wrapper: failure/timeout prints actual
+captured stdout/stderr and rethrows. Commands, environment, timeout, RD parsing
+and all original success criteria remain unchanged. It does not hide a failure.
 
-## Resource boundary and estimate
+A failed job separately preserves exact allowlisted public build outputs and own
+logs through collector52cde8..., under2GiB. Its marker is
+ONLY_RECOVERY_NOT_INSTALL_READY; signatures/qualification are not inferred.
+include-hidden-files:true applies only to that explicit collector output so its
+safe .cache__*.log names are retained. No SDK or original Apple OS image/raw/library, RD memory dump,
+shader/cache/archive payload or dependency tree is added to upload paths. Full
+qualification checkpoints contain identities/counters only, not original or
+compiled Apple cache bytes. Successful candidate and recovery artifacts are distinct.
 
-Job timeout120minutes; Cargo one build job; RUSTUP_TOOLCHAIN=1.98.0 is explicit, and actual bare cargo/rustc versions plus the installed iOS target are checked. Private resource adapters invoke the real Ninja/make with a final `-j2`; these do not impersonate SDK, clang, or codesign and are recorded. At least8GiB must remain free after installing tools. Insufficient space stops the job; it never deletes Xcode.
+Deployment: unixnu-gpu-full-qualification.yml to
+.github/workflows/unixnu-gpu-only.yml; build_gpu_only.py, qualify_gpu_host.py,
+verify_gpu_artifacts.py, host-XnuMemoryFixture.h, host-resource-private.h,
+host-check-turnip-darwin-host.py, host-host_gpu_service.cpp,
+host-gen-turnip-replay.py and collect_failed_components.py to ci/;
+ci-dependencies.json and this README to repository root.
 
-A provisional planning allowance is30-90minutes, up to the120minute cap. Source downloads, Rust LTO and runner queueing affect actual duration. Completing the full pipeline on the standard small ARM64 runner remains a qualification requirement. This workflow uses the approved dedicated public repository and standard runner; it claims no private or paid larger-runner allowance.
-
-## Real SDK/signature gates
-
-Before a long build, the helper requires real SDK headers/frameworks, cross-links an ordinary ARM64 iOS17 executable, signs it with the actual codesign, and independently parses its bytes.
-
-For the production plugin, Turnip dylib and probe daemon, validation checks:
-
-- ARM64 rather than arm64e; actual LC_BUILD_VERSION platform2/minimum17.0.
-- A bounded LC_CODE_SIGNATURE SuperBlob and primary SHA256 CodeDirectory.
-- Page-size exponent12, every actual4KiB code-page digest and the computed CDHash.
-- Agreement with the real codesign detail, strict signature verification and the producer trust.json CDHashes.
-- The bundle's resource seal as well as executable page hashes.
-
-An empty signing shim returning success cannot satisfy these gates. Signing is ad hoc `--sign -`; no developer private key is supplied.
-
-## Explicit host-peer build split
-
-The pinned plugin builder unconditionally generates a synthetic prefix replay. If its host peer is absent, the original whole host suite requires the original iPadOS QuartzCore/default.metallib.
-
-This source-only stage does not fetch that Apple input. It executes only the exact, hash-bound build prefix of `check-turnip-darwin-host.py`, stopping before its first software-test invocation. This creates the genuine host peer and plugin_smoke; the original replay generator then records its synthetic run normally. The plugin, Turnip and bridge producer source is unmodified.
-
-The prefix is not presented as passing the author's complete qualification. Its original blob identity and extracted prefix SHA256 are in the output manifest.
-
-## Outputs and mandatory qualification gate
-
-The candidate artifact contains self-built NativeAdrenoMetal.bundle (including Turnip), adrenoprobed and its generated plists, trust.json, the iOS Metal bridge archive, build logs, and input/output hashes. No SDK files, Apple OS images/libraries, Data seed, tablet platform seed or owner private key are uploaded.
-
-The manifest and marker explicitly say:
-
-`CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY`
-
-`REQUIRED_PENDING_ORIGINAL_INPUT`
-
-Before installation, the next controlled qualification stage must use the legitimate matching original input locally or temporarily on the runner, never upload it:
-
-1. QuartzCore/default.metallib of iPadOS17.7.11-21H461, SHA256 `606f913adf520420f9b4bb666efb782a68c830f082f1e559e17b20d0d13adbc9`.
-2. Build the matching host bridge, then run the author's `check-quartzcore-turnip-cache-host.py` and `check-priming-cache-host.py` with fresh bounded outputs. Restore the remaining full host qualification steps rather than treating this prefix build as their substitute.
-3. Record the original-input provenance/hash and all resulting source/binary/cache identities. Gate release on explicit PASS.
-4. Back on F:, independently verify artifacts and prepare copied local seed/addon/trust inputs with the matching current owner identity. Never upload that private owner key.
-5. Physical qualification remains separate: publication, GPU initialization, submit/fence/present, known output and actual memory pressure must be measured after a separately approved test. A successful compile is not hardware GPU proof.
-
-## Author sources
-
-- [GPU pipeline](https://unixnu.com/drivers/adreno740)
-- [Pinned plugin builder](https://github.com/UniXNU/UniXNU/blob/6790e7ce6e77f67a9174fba1255e64eacf1c41ad/scripts/build-adreno-metal-plugin.py)
-- [Pinned replay/host suite](https://github.com/UniXNU/UniXNU/blob/6790e7ce6e77f67a9174fba1255e64eacf1c41ad/scripts/check-turnip-darwin-host.py)
-- [Original-input suite](https://github.com/UniXNU/UniXNU-sheng/blob/28b30285768e04008ac525c04182e245bfac441e/scripts/check-quartzcore-turnip-cache-host.py)
-
-Source comparison did not find an exact author-published sheng GPU component artifact to download. This dedicated workflow repairs the host fixture after a failed first run and produces candidate components; it does not repackage or claim a verified author installation.
-
-## Pinned host fixture repair
-
-The fixture layer overlays tests/XnuMemoryFixture.h, guarded by exact before/after hashes; a generated host include supplies two Apple GPU-role constants. The additional host script and service overlays are described below. The fixture uses calloc/free and an explicit controllable host task role. It does not implement or impersonate SDK/signing tools, alter production driver/ABI, or claim physical GPU scheduling. CI records the overlay hashes; all original full-qualification and physical-GPU gates remain pending. Local genuine Linux syntax checks covered the original nine shared core sources and host_gpu_service, plus allocation/free and role primitive execution; these checks do not establish Darwin linking, full host-qualification success or physical GPU behavior.
-
-The helper now reports each phase start/completion and a 30-second running heartbeat while preserving the original subprocess timeout.
-
-## Complete host link repair
-
-The second cloud attempt (41426216552, a1bf684c843439fe665991a960ea9965e5a2b33f) compiled the repaired fixture but could not link the peer: the original host list omitted NativeAdrenoPreempt, and the UserClient clock export was absent. Two additional exact-hash host overlays add that existing production source to the test build and export the existing host steady-clock microsecond function. The production source files and iOS targets are unmodified. The real macOS host link now runs before long Mesa builds. Its isolated prefix omits only an unused Turnip existence guard and stops before smoke clients; the complete later build retains its genuine Turnip requirement. A successful preflight is only compile/link qualification, never GPU execution.
-
-Additional CI files: host-check-turnip-darwin-host.py, host-gpu-service.cpp and host-link-preflight-prefix.py belong in ci/ alongside the previous helpers and fixtures.
-
-## Runtime replay diagnostic revision
-
-The third run (41429637585, 2fdbc6240978a2dbeb1fa1e48e971cc46640f038) passed the real Mac strict link, full host peer build and both host/iOS Turnip builds. Its first runtime recording exited1, but the original generator captured its stdout/stderr without printing them. This revision only prints those original captured bytes on failure/timeout, then rethrows the original exception. It runs the same complete generator before the iOS build, keeping its exact environment, inner300s limit and RD parsing/validation. No failing result is accepted.
-
-Already-built public components are collected on failure into a separate ONLY_RECOVERY_NOT_INSTALL_READY artifact with exact paths, sizes and hashes. This artifact is not the successful iOS candidate and is not an installation package. No automatic cross-run reuse is enabled. The collector never includes SDK/OS images, original Apple libraries, RD memory dumps or dependency trees.
-
-Diagnostic CI file placement: `host-gen-turnip-replay.py` and `collect_failed_components.py` belong in `ci/` alongside the existing helpers.
+Manual dispatch and one exact main-push commit gate are retained. All actions are
+existing pinned versions; contents:read only, standard macos26ARM64, Cargo1,
+Ninja/make2, Rust1.98, initial8GiB free, author5.25GiB test reserve, 120minute job,
+2GiB artifact bound and7day retention remain. No paid larger runner, Xcode deletion,
+cache service or skipped qualification is introduced. Review before publishing.

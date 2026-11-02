@@ -1,7 +1,8 @@
-"""Build source-pinned candidate GPU components on real macOS; never install."""
+"""Future V4 hostfix: signed GPU components plus full real host qualification; never install."""
 import argparse, datetime, hashlib, json, os, platform, shutil, subprocess, sys, threading, time
 from pathlib import Path
 from verify_gpu_artifacts import check, require
+from qualify_gpu_host import matching_original_input, qualify_author_host
 
 MAIN = '6790e7ce6e77f67a9174fba1255e64eacf1c41ad'
 DEVICE = '28b30285768e04008ac525c04182e245bfac441e'
@@ -136,33 +137,26 @@ overlays['drivers/Adreno740/tests/XnuMemoryFixture.h'] = sha(fixture)
 overlays['build/turnip-darwin-host/host-include/sys/resource_private.h'] = sha(host_private)
 print(json.dumps(dict(phase='host-fixture-compatibility', original_sha256=fixture_before,
                      patched_sha256=sha(fixture), scope='host test fixture only')), flush=True)
-# Complete the author's host-only software peer link, with exact input identities.
-peer_source = root / 'scripts/check-turnip-darwin-host.py'
-expected_blob = '57d153282f45b0410870d5022870cb2d317ae74c'
-require(read(['git', 'hash-object', peer_source]) == expected_blob, 'Original host peer source changed')
-require(sha(peer_source) == '7ab580b33aa544a0e8931679884d2aa717e5663d6d9ff52ee5cda90c128862c0', 'Original host script bytes changed')
-peer_overlay = Path(__file__).resolve().parent / 'host-check-turnip-darwin-host.py'
-peer_after = '29a805edbf1905112029d7e0adca8668fa6781265a03f571f1760a566fe7732b'
-require(sha(peer_overlay) == peer_after, 'Unreviewed host Preempt build list')
-peer_source.write_bytes(peer_overlay.read_bytes())
-service = root / 'drivers/Adreno740/tests/hostsim/host_gpu_service.cpp'
-service_before = '4ef75c3cf644cdc3ead973e568a580124dfe3aaf0527c93770d5ac1c1cd7810b'
-service_after = '198d5e3ce6c2b2d9af1dd14f257e4a89e672e67873a92bee2e5f7090038c361e'
-service_overlay = Path(__file__).resolve().parent / 'host-gpu-service.cpp'
-require(sha(service) == service_before and sha(service_overlay) == service_after, 'Host clock overlay identity mismatch')
-service.write_bytes(service_overlay.read_bytes())
-overlays['scripts/check-turnip-darwin-host.py'] = sha(peer_source)
-overlays['drivers/Adreno740/tests/hostsim/host_gpu_service.cpp'] = sha(service)
-# A genuine Mac SDK compile+strict link before the long Mesa/Turnip builds.
-# This exact prefix omits only the unused Turnip existence guard; no fake file is created.
-preflight_source = Path(__file__).resolve().parent / 'host-link-preflight-prefix.py'
-require(sha(preflight_source) == 'a3f12d39dc20fa084030566c68b7ad5b2797d6539dab0a09ffe46a244d36766d', 'Unreviewed early Mac link preflight')
-preflight_wrapper = root / 'build/ci-host-link-preflight-wrapper.py'
-preflight_wrapper.write_text("from pathlib import Path\np=Path(" + repr(str(peer_source)) +
-    ")\nscope={'__file__':str(p),'__name__':'__ci_host_strict_link_preflight__'}\n" +
-    "exec(compile(" + repr(preflight_source.read_text()) + ",str(p),'exec'),scope)\n")
-run([sys.executable, preflight_wrapper], 'real-mac-host-peer-link-preflight', 180)
-# Diagnostics only: retain the exact original runtime invocation and RD validation.
+# Exact host-only link closure: include the production preempt core as-is and
+# provide the already-used host monotonic microsecond clock to diagnostics.
+host_link_repairs = [
+    ('scripts/check-turnip-darwin-host.py', 'host-check-turnip-darwin-host.py',
+     '7ab580b33aa544a0e8931679884d2aa717e5663d6d9ff52ee5cda90c128862c0',
+     '29a805edbf1905112029d7e0adca8668fa6781265a03f571f1760a566fe7732b'),
+    ('drivers/Adreno740/tests/hostsim/host_gpu_service.cpp', 'host-host_gpu_service.cpp',
+     '4ef75c3cf644cdc3ead973e568a580124dfe3aaf0527c93770d5ac1c1cd7810b',
+     'ffa33ecae11ac485f7aa0339232169afb7206a55206cfe515284ca7052d09e7f'),
+]
+for relative, asset, before_sha, after_sha in host_link_repairs:
+    target = root / relative
+    overlay = Path(__file__).resolve().parent / asset
+    require(sha(target) == before_sha and sha(overlay) == after_sha,
+            'Unreviewed host link-closure source ' + relative)
+    target.write_bytes(overlay.read_bytes())
+    overlays[relative] = sha(target)
+print(json.dumps(dict(phase='host-link-closure', scope='host tests only',
+                     full_author_test_logic_preserved=True)), flush=True)
+# Diagnostics only; keep the original runtime call, environment and RD acceptance.
 replay_source = root / 'scripts/gen-turnip-replay.py'
 replay_before = 'd61c46c63835e0da62f9515c7667a2c8ce51d840b55294cee6c72a07ce1cb096'
 replay_after = 'f217b7b59a0015f22277eedd856020b024d337ed2e1ce607c2ec47c8938ef6ee'
@@ -191,25 +185,12 @@ require(read(['git', 'rev-parse', 'HEAD'], m2v) == TRANSLATOR, 'Translator pin d
 run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'host'],
     'turnip-host', 1800)
 
-# The original replay generator needs the host software peer. Its default whole
-# qualification script also needs original QuartzCore.metallib, which is deliberately
-# absent here. Execute ONLY the exact pinned build prefix; no test-suite PASS claim.
-require(sha(peer_source) == peer_after, 'Patched host peer source changed')
-marker = "\nenv = dict(os.environ, DYLD_INSERT_LIBRARIES=str(shim), MESA_LOG='')\n"
-text = peer_source.read_text()
-require(text.count(marker) == 1, 'Pinned host-peer split marker changed')
-prefix = text.split(marker, 1)[0]
-prefix_file = root / 'build/ci-host-replay-peer-prefix.py'
-prefix_file.write_text(prefix)
-# __file__ must stay at scripts/ level because the unmodified prefix computes ROOT.
-wrapper = root / 'build/ci-host-replay-peer-wrapper.py'
-wrapper.write_text("import runpy\nfrom pathlib import Path\np=Path(" + repr(str(peer_source)) +
-                   ")\nscope={'__file__':str(p),'__name__':'__ci_host_peer_build_only__'}\n" +
-                   "exec(compile(" + repr(prefix) + ",str(p),'exec'),scope)\n")
-run([sys.executable, wrapper], 'host-replay-peer-build-only', 600)
-require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Host replay peer missing')
-run([sys.executable, 'scripts/gen-turnip-replay.py'],
-    'host-replay-smoke-before-ios', 360)
+# Full original commands replace the prior build-prefix surrogate.
+with matching_original_input(root, logs) as original_input:
+    host_qualification = qualify_author_host(root, device, logs, run)
+require(original_input['cleanup_completed'], 'Owned original-input cleanup must complete')
+overlays['scripts/check-quartzcore-turnip-cache-host.py'] = host_qualification['checker_sources']['check-quartzcore-turnip-cache-host.py']
+require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Qualified host replay peer missing')
 run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'ios'],
     'turnip-ios17', 1800)
 run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
@@ -242,34 +223,59 @@ lock = root / 'build/adreno-metal-bridge/Cargo.lock'
 require(lock.is_file(), 'Actual resolved Cargo.lock missing')
 shutil.copy2(lock, output / 'Cargo.lock')
 (output / 'mesa-requirements.txt').write_text((root / 'scripts/requirements-adreno-compiler.txt').read_text())
-for p in list((root / '.cache').glob('*.log')) + list((root / 'build/adreno-metal-bridge').glob('*.log')):
-    if p.stat().st_size <= 32 * 1024**2:
-        shutil.copy2(p, logs / ('producer-' + p.name))
+# Explicit artifact paths only. Apple inputs and preserved derived archives/cache
+# stay in root build/cache directories and are never recursively copied here.
+allowed_root = {'Cargo.lock', 'mesa-requirements.txt'}
+allowed_component_files = {
+    'trust.json', 'adrenoprobed', 'libadreno_metal_bridge.a',
+    'adrenoprobed-entitlements.plist', 'org.blu-sharky.adrenoprobed.plist',
+    'com.apple.iomfb_fdr_loader.plist', 'com.apple.bluetoothd.plist',
+    'NativeAdrenoMetal.bundle/NativeAdrenoMetal',
+    'NativeAdrenoMetal.bundle/libvulkan_freedreno.dylib',
+    'NativeAdrenoMetal.bundle/Info.plist',
+    'NativeAdrenoMetal.bundle/_CodeSignature/CodeResources',
+}
+for p in output.rglob('*'):
+    require(not p.is_symlink(), 'Artifact symlink refused')
+    if p.is_file():
+        relative = p.relative_to(output)
+        if relative.parts[0] == 'components':
+            require(Path(*relative.parts[1:]).as_posix() in allowed_component_files,
+                    'Unexpected component resource requires review: ' + str(relative))
+        elif relative.parts[0] == 'logs':
+            require(len(relative.parts) == 2 and p.suffix in {'.log', '.json'},
+                    'Unexpected diagnostic payload')
+        else:
+            require(relative.as_posix() in allowed_root, 'Unexpected root artifact')
+        require(p.suffix.lower() not in {'.dmg', '.ipsw', '.metallib', '.raw', '.aea',
+                                        '.dbr', '.cdr', '.img', '.archive', '.cache', '.zip'},
+                'Original-input or unaudited derived payload refused')
+        with p.open('rb') as stream:
+            require(stream.read(4) != b'MTLB', 'Metal library payload refused')
 require(sum(p.stat().st_size for p in output.rglob('*') if p.is_file()) <= 2 * 1024**3,
         'Candidate artifact exceeds2GiB bound')
 output_hashes = {str(p.relative_to(output)): dict(bytes=p.stat().st_size, sha256=sha(p))
                  for p in sorted(output.rglob('*')) if p.is_file()}
 manifest = dict(
     status='CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY',
-    qualification='REQUIRED_PENDING_ORIGINAL_INPUT',
+    schema='unixnu.gpu-components.v4-host-qualified',
+    qualification='FULL_AUTHOR_HOST_SOFTWARE_PASS_PHYSICAL_GPU_PENDING',
+    host_software_qualification=dict(completed=True, status='PASS', details=host_qualification),
     original_input_qualification=dict(
         required_library='iPadOS17.7.11-21H461 QuartzCore/default.metallib',
         sha256='606f913adf520420f9b4bb666efb782a68c830f082f1e559e17b20d0d13adbc9',
         required_suite='scripts/check-quartzcore-turnip-cache-host.py',
         additional_suite='scripts/check-priming-cache-host.py',
-        completed=False,
-        reason='No original Apple OS input is fetched/uploaded by this source-only job'),
+        completed=True, provenance=original_input, original_Apple_input_uploaded=False),
     exact_sources=dict(UniXNU=MAIN, device=DEVICE, components=gitlinks, Mesa=MESA,
                        translator=TRANSLATOR, overlays=overlays),
-    source_split=dict(original_script_blob=expected_blob,
-        prefix_sha256=hashlib.sha256(prefix.encode()).hexdigest(),
-        mode='host software peer compilation only; original complete suite NOT run',
+    source_split=dict(mode='original complete host suite plus preserved original-input controls',
+        build_prefix_substitution=False,
         replay_diagnostics=dict(original_sha256=replay_before, patched_sha256=sha(replay_source),
-            original_command_environment_timeout_and_RD_validation_unchanged=True,
-            early_host_replay_smoke_passed=True),
-        host_link_compatibility=dict(original_script_blob=expected_blob, patched_script_sha256=sha(peer_source),
-            original_service_sha256=service_before, patched_service_sha256=sha(service),
-            early_Mac_strict_link_passed=True, early_prefix_sha256=sha(preflight_source)),
+            original_runtime_call_environment_timeout_and_RD_criteria_unchanged=True),
+        hostsim_VA_configuration_only=True,
+        host_link_source_repairs=[dict(path=relative, original_sha256=before_sha, patched_sha256=after_sha)
+                                  for relative, asset, before_sha, after_sha in host_link_repairs],
         host_fixture_compatibility=dict(original_sha256=fixture_before, patched_sha256=sha(fixture),
             role_constants_sha256=sha(host_private), default_role='explicit host unmanaged; not real OS task role'),
         plugin_Turnip_bridge_sources_modified=False),
@@ -286,11 +292,14 @@ manifest = dict(
         concurrency=dict(cargo_jobs=1, real_ninja=real_ninja, real_make=real_make,
                          adapter_max_jobs=2)),
     binaries=identities, outputs=output_hashes,
-    no_device_seed_private_key_or_OS_images=True,
+    no_device_seed_or_private_key=True,
+    original_OS_inputs_fetched_temporarily_not_uploaded=True,
+    derived_cache_archive_payloads_uploaded=False,
+    installation_ready=False,
     hardware_GPU_execution_verified=False,
     created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat())
 (output / 'input-output-manifest.json').write_text(json.dumps(manifest, indent=2))
-(output / 'REQUIRED_PENDING_ORIGINAL_INPUT.txt').write_text(
-    'CANDIDATE ONLY. Complete original-input and physical GPU qualification before installation.\n')
+(output / 'REQUIRED_PENDING_PHYSICAL_GPU_QUALIFICATION.txt').write_text(
+    'CANDIDATE ONLY. Full host software controls passed; physical GPU and installation qualification remain required.\n')
 print(json.dumps(dict(status=manifest['status'], qualification=manifest['qualification'],
                      binaries=identities), indent=2))

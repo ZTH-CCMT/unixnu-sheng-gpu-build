@@ -43,9 +43,56 @@
     "vulkan-headers"
   ],
   "dependency_versions_fully_deterministic": false,
-  "resolved_Cargo_lock": "saved by actual run; no remote run performed",
-  "qualification_gate": "REQUIRED_PENDING_ORIGINAL_INPUT",
+  "resolved_Cargo_lock": "Saved by this actual run; not assumed from prior host-only controls",
+  "qualification_gate": "FULL_AUTHOR_HOST_SOFTWARE_PASS_PHYSICAL_GPU_PENDING",
   "RUSTUP_TOOLCHAIN": "1.98.0",
   "LLVM_CONFIG_PATH_required": false,
-  "LLVM_use": "llvm-as assembles source fixtures; pinned metal2vulkan-air is a native Rust reader, no LLVM runtime native dependency"
+  "LLVM_use": "llvm-as assembles source fixtures; pinned metal2vulkan-air is a native Rust reader, no LLVM runtime native dependency",
+  "plan_version": "FULL_HOST_QUALIFIED_VA_FIXED_CANDIDATE",
+  "host_fixture_compatibility": {
+    "base_helper_sha256": "976c66f79d531d8b77b25e9e91b88395a955c113d81c1fed8d4786e0ef1b8c0b",
+    "fixture_sha256": "18015ab4e9bc6a276b7c5aaf09571ba84e6d5936ede5f419a211c6dbb808f55f",
+    "role_constants_sha256": "fb9dd31b1b0a82c7bc64223a8a475d1408b661fd1a3efdcca62930a5aa802292"
+  },
+  "original_input": {
+    "url": "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw",
+    "member": "044-76034-038.dmg",
+    "decoded_bytes": 3303014400,
+    "encoded_bytes": 1321525120,
+    "archive_bytes": 6835124840,
+    "manifest_sha256": "199fb5de41c26d86c080b4e8e402c40309c5f42e7bda18c210451b09bcb49bf7",
+    "max_response_bytes": 8388608,
+    "max_total_range_body_bytes": 1388633984,
+    "temporary_official_fetch_only": true,
+    "uploaded": false
+  },
+  "test_free_bytes": 5637144576,
+  "host_link_source_repairs": {
+    "check-turnip-darwin-host.before.py": "7ab580b33aa544a0e8931679884d2aa717e5663d6d9ff52ee5cda90c128862c0",
+    "check-turnip-darwin-host.after.py": "29a805edbf1905112029d7e0adca8668fa6781265a03f571f1760a566fe7732b",
+    "host_gpu_service.before.cpp": "4ef75c3cf644cdc3ead973e568a580124dfe3aaf0527c93770d5ac1c1cd7810b",
+    "host_gpu_service.after.cpp": "ffa33ecae11ac485f7aa0339232169afb7206a55206cfe515284ca7052d09e7f"
+  },
+  "link_repair_independent_review": "F source-review/native-author-gpu-ci-hostlink-independent-20261102/review.json",
+  "hostsim_VA_configuration": {
+    "scope": "Host simulator only, production client aperture formula and inputBits guard",
+    "asset_sha256": "ffa33ecae11ac485f7aa0339232169afb7206a55206cfe515284ca7052d09e7f",
+    "warm_AB_run": 41440107606,
+    "warm_AB_commit": "53d31f512404247182f1c694b7dc629a0c9ea3a5",
+    "cached_Mesa_and_smokes_unchanged": true,
+    "physical_GPU_proof": false
+  },
+  "full_qualification_plan_review": "F source-review/native-author-gpu-ci-full-qualification-independent-20261102/review-final.json",
+  "replay_error_logging": {
+    "original_sha256": "d61c46c63835e0da62f9515c7667a2c8ce51d840b55294cee6c72a07ce1cb096",
+    "after_sha256": "f217b7b59a0015f22277eedd856020b024d337ed2e1ce607c2ec47c8938ef6ee",
+    "runtime_and_RD_criteria_unchanged": true
+  },
+  "failure_recovery": {
+    "collector_sha256": "52cde8d624397f77901edd6e23d91f1a69d8d563b69d3e33f752968c2796e622",
+    "source_public_exact_whitelist": true,
+    "max_bytes": 2147483648,
+    "include_hidden_files_only_explicit_collector_output": true,
+    "SDK_OS_RD_or_dependency_trees_uploaded": false
+  }
 }
