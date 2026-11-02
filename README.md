@@ -84,3 +84,11 @@ The helper now reports each phase start/completion and a 30-second running heart
 The second cloud attempt (41426216552, a1bf684c843439fe665991a960ea9965e5a2b33f) compiled the repaired fixture but could not link the peer: the original host list omitted NativeAdrenoPreempt, and the UserClient clock export was absent. Two additional exact-hash host overlays add that existing production source to the test build and export the existing host steady-clock microsecond function. The production source files and iOS targets are unmodified. The real macOS host link now runs before long Mesa builds. Its isolated prefix omits only an unused Turnip existence guard and stops before smoke clients; the complete later build retains its genuine Turnip requirement. A successful preflight is only compile/link qualification, never GPU execution.
 
 Additional CI files: host-check-turnip-darwin-host.py, host-gpu-service.cpp and host-link-preflight-prefix.py belong in ci/ alongside the previous helpers and fixtures.
+
+## Runtime replay diagnostic revision
+
+The third run (41429637585, 2fdbc6240978a2dbeb1fa1e48e971cc46640f038) passed the real Mac strict link, full host peer build and both host/iOS Turnip builds. Its first runtime recording exited1, but the original generator captured its stdout/stderr without printing them. This revision only prints those original captured bytes on failure/timeout, then rethrows the original exception. It runs the same complete generator before the iOS build, keeping its exact environment, inner300s limit and RD parsing/validation. No failing result is accepted.
+
+Already-built public components are collected on failure into a separate ONLY_RECOVERY_NOT_INSTALL_READY artifact with exact paths, sizes and hashes. This artifact is not the successful iOS candidate and is not an installation package. No automatic cross-run reuse is enabled. The collector never includes SDK/OS images, original Apple libraries, RD memory dumps or dependency trees.
+
+Diagnostic CI file placement: `host-gen-turnip-replay.py` and `collect_failed_components.py` belong in `ci/` alongside the existing helpers.

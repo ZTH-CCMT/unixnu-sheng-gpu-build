@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   gpu-components:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Link complete host GPU peer and build UniXNU OS17 components 20261102'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Diagnose native host replay and build UniXNU OS17 GPU components 20261102'
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -66,4 +66,17 @@ jobs:
           name: unixnu-os17-gpu-failed-logs-${{ github.run_id }}
           path: component-artifact/logs/
           if-no-files-found: ignore
+          retention-days: 7
+      - name: Collect already-built public diagnostic components
+        id: collect_recovery
+        if: failure()
+        continue-on-error: true
+        run: python3 plan/ci/collect_failed_components.py --root upstream --output failed-components-artifact
+      - name: Upload recovery-only diagnostic components
+        if: failure() && steps.collect_recovery.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: unixnu-os17-gpu-FAILED-RECOVERABLE-${{ github.run_id }}
+          path: failed-components-artifact/
+          if-no-files-found: error
           retention-days: 7

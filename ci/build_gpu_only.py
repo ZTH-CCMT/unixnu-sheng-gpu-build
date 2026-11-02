@@ -162,6 +162,15 @@ preflight_wrapper.write_text("from pathlib import Path\np=Path(" + repr(str(peer
     ")\nscope={'__file__':str(p),'__name__':'__ci_host_strict_link_preflight__'}\n" +
     "exec(compile(" + repr(preflight_source.read_text()) + ",str(p),'exec'),scope)\n")
 run([sys.executable, preflight_wrapper], 'real-mac-host-peer-link-preflight', 180)
+# Diagnostics only: retain the exact original runtime invocation and RD validation.
+replay_source = root / 'scripts/gen-turnip-replay.py'
+replay_before = 'd61c46c63835e0da62f9515c7667a2c8ce51d840b55294cee6c72a07ce1cb096'
+replay_after = 'f217b7b59a0015f22277eedd856020b024d337ed2e1ce607c2ec47c8938ef6ee'
+replay_overlay = Path(__file__).resolve().parent / 'host-gen-turnip-replay.py'
+require(sha(replay_source) == replay_before and sha(replay_overlay) == replay_after,
+        'Unreviewed host replay diagnostics')
+replay_source.write_bytes(replay_overlay.read_bytes())
+overlays['scripts/gen-turnip-replay.py'] = sha(replay_source)
 compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
 translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
 require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
@@ -199,6 +208,8 @@ wrapper.write_text("import runpy\nfrom pathlib import Path\np=Path(" + repr(str(
                    "exec(compile(" + repr(prefix) + ",str(p),'exec'),scope)\n")
 run([sys.executable, wrapper], 'host-replay-peer-build-only', 600)
 require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Host replay peer missing')
+run([sys.executable, 'scripts/gen-turnip-replay.py'],
+    'host-replay-smoke-before-ios', 360)
 run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'ios'],
     'turnip-ios17', 1800)
 run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
@@ -253,6 +264,9 @@ manifest = dict(
     source_split=dict(original_script_blob=expected_blob,
         prefix_sha256=hashlib.sha256(prefix.encode()).hexdigest(),
         mode='host software peer compilation only; original complete suite NOT run',
+        replay_diagnostics=dict(original_sha256=replay_before, patched_sha256=sha(replay_source),
+            original_command_environment_timeout_and_RD_validation_unchanged=True,
+            early_host_replay_smoke_passed=True),
         host_link_compatibility=dict(original_script_blob=expected_blob, patched_script_sha256=sha(peer_source),
             original_service_sha256=service_before, patched_service_sha256=sha(service),
             early_Mac_strict_link_passed=True, early_prefix_sha256=sha(preflight_source)),
