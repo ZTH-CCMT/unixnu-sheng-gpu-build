@@ -136,6 +136,32 @@ overlays['drivers/Adreno740/tests/XnuMemoryFixture.h'] = sha(fixture)
 overlays['build/turnip-darwin-host/host-include/sys/resource_private.h'] = sha(host_private)
 print(json.dumps(dict(phase='host-fixture-compatibility', original_sha256=fixture_before,
                      patched_sha256=sha(fixture), scope='host test fixture only')), flush=True)
+# Complete the author's host-only software peer link, with exact input identities.
+peer_source = root / 'scripts/check-turnip-darwin-host.py'
+expected_blob = '57d153282f45b0410870d5022870cb2d317ae74c'
+require(read(['git', 'hash-object', peer_source]) == expected_blob, 'Original host peer source changed')
+require(sha(peer_source) == '7ab580b33aa544a0e8931679884d2aa717e5663d6d9ff52ee5cda90c128862c0', 'Original host script bytes changed')
+peer_overlay = Path(__file__).resolve().parent / 'host-check-turnip-darwin-host.py'
+peer_after = '29a805edbf1905112029d7e0adca8668fa6781265a03f571f1760a566fe7732b'
+require(sha(peer_overlay) == peer_after, 'Unreviewed host Preempt build list')
+peer_source.write_bytes(peer_overlay.read_bytes())
+service = root / 'drivers/Adreno740/tests/hostsim/host_gpu_service.cpp'
+service_before = '4ef75c3cf644cdc3ead973e568a580124dfe3aaf0527c93770d5ac1c1cd7810b'
+service_after = '198d5e3ce6c2b2d9af1dd14f257e4a89e672e67873a92bee2e5f7090038c361e'
+service_overlay = Path(__file__).resolve().parent / 'host-gpu-service.cpp'
+require(sha(service) == service_before and sha(service_overlay) == service_after, 'Host clock overlay identity mismatch')
+service.write_bytes(service_overlay.read_bytes())
+overlays['scripts/check-turnip-darwin-host.py'] = sha(peer_source)
+overlays['drivers/Adreno740/tests/hostsim/host_gpu_service.cpp'] = sha(service)
+# A genuine Mac SDK compile+strict link before the long Mesa/Turnip builds.
+# This exact prefix omits only the unused Turnip existence guard; no fake file is created.
+preflight_source = Path(__file__).resolve().parent / 'host-link-preflight-prefix.py'
+require(sha(preflight_source) == 'a3f12d39dc20fa084030566c68b7ad5b2797d6539dab0a09ffe46a244d36766d', 'Unreviewed early Mac link preflight')
+preflight_wrapper = root / 'build/ci-host-link-preflight-wrapper.py'
+preflight_wrapper.write_text("from pathlib import Path\np=Path(" + repr(str(peer_source)) +
+    ")\nscope={'__file__':str(p),'__name__':'__ci_host_strict_link_preflight__'}\n" +
+    "exec(compile(" + repr(preflight_source.read_text()) + ",str(p),'exec'),scope)\n")
+run([sys.executable, preflight_wrapper], 'real-mac-host-peer-link-preflight', 180)
 compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
 translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
 require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
@@ -159,9 +185,7 @@ run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'host'],
 # The original replay generator needs the host software peer. Its default whole
 # qualification script also needs original QuartzCore.metallib, which is deliberately
 # absent here. Execute ONLY the exact pinned build prefix; no test-suite PASS claim.
-peer_source = root / 'scripts/check-turnip-darwin-host.py'
-expected_blob = '57d153282f45b0410870d5022870cb2d317ae74c'
-require(read(['git', 'hash-object', peer_source]) == expected_blob, 'Host peer source changed')
+require(sha(peer_source) == peer_after, 'Patched host peer source changed')
 marker = "\nenv = dict(os.environ, DYLD_INSERT_LIBRARIES=str(shim), MESA_LOG='')\n"
 text = peer_source.read_text()
 require(text.count(marker) == 1, 'Pinned host-peer split marker changed')
@@ -229,6 +253,9 @@ manifest = dict(
     source_split=dict(original_script_blob=expected_blob,
         prefix_sha256=hashlib.sha256(prefix.encode()).hexdigest(),
         mode='host software peer compilation only; original complete suite NOT run',
+        host_link_compatibility=dict(original_script_blob=expected_blob, patched_script_sha256=sha(peer_source),
+            original_service_sha256=service_before, patched_service_sha256=sha(service),
+            early_Mac_strict_link_passed=True, early_prefix_sha256=sha(preflight_source)),
         host_fixture_compatibility=dict(original_sha256=fixture_before, patched_sha256=sha(fixture),
             role_constants_sha256=sha(host_private), default_role='explicit host unmanaged; not real OS task role'),
         plugin_Turnip_bridge_sources_modified=False),

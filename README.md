@@ -75,6 +75,12 @@ Source comparison did not find an exact author-published sheng GPU component art
 
 ## Pinned host fixture repair
 
-Only tests/XnuMemoryFixture.h is overlaid, guarded by exact before/after hashes; a generated host include supplies two Apple GPU-role constants. The fixture uses calloc/free and an explicit controllable host task role. It does not implement or impersonate SDK/signing tools, alter production driver/ABI, or claim physical GPU scheduling. CI records the overlay hashes; all original full-qualification and physical-GPU gates remain pending. Local genuine Linux syntax checks covered the original nine shared core sources and host_gpu_service, plus allocation/free and role primitive execution; these checks do not establish Darwin linking, full host-qualification success or physical GPU behavior.
+The fixture layer overlays tests/XnuMemoryFixture.h, guarded by exact before/after hashes; a generated host include supplies two Apple GPU-role constants. The additional host script and service overlays are described below. The fixture uses calloc/free and an explicit controllable host task role. It does not implement or impersonate SDK/signing tools, alter production driver/ABI, or claim physical GPU scheduling. CI records the overlay hashes; all original full-qualification and physical-GPU gates remain pending. Local genuine Linux syntax checks covered the original nine shared core sources and host_gpu_service, plus allocation/free and role primitive execution; these checks do not establish Darwin linking, full host-qualification success or physical GPU behavior.
 
 The helper now reports each phase start/completion and a 30-second running heartbeat while preserving the original subprocess timeout.
+
+## Complete host link repair
+
+The second cloud attempt (41426216552, a1bf684c843439fe665991a960ea9965e5a2b33f) compiled the repaired fixture but could not link the peer: the original host list omitted NativeAdrenoPreempt, and the UserClient clock export was absent. Two additional exact-hash host overlays add that existing production source to the test build and export the existing host steady-clock microsecond function. The production source files and iOS targets are unmodified. The real macOS host link now runs before long Mesa builds. Its isolated prefix omits only an unused Turnip existence guard and stops before smoke clients; the complete later build retains its genuine Turnip requirement. A successful preflight is only compile/link qualification, never GPU execution.
+
+Additional CI files: host-check-turnip-darwin-host.py, host-gpu-service.cpp and host-link-preflight-prefix.py belong in ci/ alongside the previous helpers and fixtures.
