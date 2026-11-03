@@ -8,7 +8,7 @@
   "artifact_name": "unixnu-os17-gpu-FAILED-RECOVERABLE-41460508965",
   "archive_bytes": 66351879,
   "archive_sha256": "183037fc94098078fa3a9d44243780c1bd1d1669fe1c9e91b1d5b4d334395f3a",
-  "manifest_sha256": "df9ba91f0a1ebd017abae4e42c568aff2dc793f9e4f4049d3f67e7a5385c9b04",
+  "manifest_sha256": "5fd309630d6ec802e9bff16cfd99815626dcb6280d9a75dd66f50576fbada488",
   "expected_pins": {
     "UniXNU": "6790e7ce6e77f67a9174fba1255e64eacf1c41ad",
     "device": "28b30285768e04008ac525c04182e245bfac441e",

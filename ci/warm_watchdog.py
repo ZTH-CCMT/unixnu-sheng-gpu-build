@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-POLICY_SHA = '4e44feb1b374113eee1528dacf26bb419b0e606d60b7a52a902d4c4b3d3e8c47'
+POLICY_SHA = '885b5e57c0ff512d1d2148eff32b76d783180e86596f7cad15672d9cacbd4948'
 CHUNK = 1024**2
 
 def need(ok, reason):

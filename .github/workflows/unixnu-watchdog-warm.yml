@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   watchdog-diagnostic:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Diagnose UniXNU host watchdog with authenticated C9 frozen binaries 20261103'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Diagnose UniXNU host watchdog with authenticated C9 frozen binaries 20261103 v2'
     runs-on: macos-26
     timeout-minutes: 25
     env:
