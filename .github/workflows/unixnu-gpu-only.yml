@@ -1,4 +1,4 @@
-name: UniXNU OS17 GPU with exact iOS reuse and OS17 compile compatibility
+name: UniXNU OS17 GPU published-device failure warning diagnostics
 on:
   workflow_dispatch:
   push:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   gpu-components:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build UniXNU OS17 GPU with exact iOS reuse and OS17 compile compatibility 20261103'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build UniXNU OS17 GPU published-device warning diagnostics 20261103'
     runs-on: macos-26
     timeout-minutes: 120
     env:

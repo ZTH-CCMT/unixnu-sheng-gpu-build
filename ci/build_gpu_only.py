@@ -206,6 +206,23 @@ plugin_compile_compatibility = dict(path='drivers/AdrenoMetal/NativeAdrenoMetalP
     original_sha256=plugin_compat_original, patched_sha256=plugin_compat_patched,
     change='Add C++17 [[maybe_unused]] only to patchFramebufferBranch declaration; sole call remains arm64e-only',
     compiler_warnings_and_Werror_unchanged=True, runtime_call_sites_unchanged=True)
+# Failure diagnostics only; reuse the existing Rust warning sink and preserve the device-open result.
+plugin_warning_asset = Path(__file__).resolve().parent / 'NativeAdrenoMetalPlugin.pubfail-warning.mm'
+plugin_warning_patched = '47de53ca2a9de415de9d13b0e65b5559a47dc78883fbf509c00a11cd88bc3325'
+require(sha(plugin_compat_path) == plugin_compat_patched and sha(plugin_warning_asset) == plugin_warning_patched,
+        'Unreviewed published-device last-warning diagnostics')
+plugin_compat_path.write_bytes(plugin_warning_asset.read_bytes())
+overlays['drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm'] = sha(plugin_compat_path)
+plugin_warning_diagnostics = dict(path='drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm',
+    original_sha256=plugin_compat_patched, patched_sha256=plugin_warning_patched,
+    purpose='Display existing nmb_last_warning in bounded PW segments after published-device initialization failure',
+    SHENG_DIAG_required=True, original_PUB_error_and_return_nil_preserved=True,
+    successful_device_path_unchanged=True, GPU_features_ABI_timeouts_retries_unchanged=True,
+    uses_existing_Rust_warning_symbol=True, Rust_and_Turnip_sources_unchanged=True,
+    max_warning_UTF8_bytes=640, max_scheduled_callbacks=14,
+    persistent_last_warning_summary=True, immediate_last_warning_summary=True,
+    late_warning_callbacks_best_effort=True,
+    last_warning_may_be_empty_or_from_an_earlier_attempt=True)
 compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
 translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
 require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
@@ -241,7 +258,7 @@ with matching_original_input(root, logs) as original_input:
     host_qualification = qualify_author_host(root, device, logs, run, host_reuse)
 require(original_input['cleanup_completed'], 'Owned original-input cleanup must complete')
 require(sha(watchdog_path) == watchdog_patched, 'Watchdog source changed during complete host controls')
-require(sha(plugin_compat_path) == plugin_compat_patched, 'OS17 compatibility source changed during host controls')
+require(sha(plugin_compat_path) == plugin_warning_patched, 'Published-warning diagnostic source changed during host controls')
 overlays['scripts/check-quartzcore-turnip-cache-host.py'] = host_qualification['checker_sources']['check-quartzcore-turnip-cache-host.py']
 require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Qualified host replay peer missing')
 # Exact already-built iOS libraries are authenticated and reused, never reported as freshly compiled.
@@ -249,7 +266,7 @@ verify_frozen_ios_inputs(root, ios_reuse)
 run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
     'plugin-ios17', 2400)
 require(sha(watchdog_path) == watchdog_patched, 'Watchdog source changed during iOS production')
-require(sha(plugin_compat_path) == plugin_compat_patched, 'OS17 compatibility source changed during iOS production')
+require(sha(plugin_compat_path) == plugin_warning_patched, 'Published-warning diagnostic source changed during iOS production')
 verify_frozen_ios_inputs(root, ios_reuse)
 verify_reused_host_inputs(root, host_reuse, allow_rebuilt_peer=True)
 producer = root / 'build/adreno-metal-plugin'
@@ -315,8 +332,8 @@ output_hashes = {str(p.relative_to(output)): dict(bytes=p.stat().st_size, sha256
                  for p in sorted(output.rglob('*')) if p.is_file()}
 manifest = dict(
     status='CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY',
-    schema='unixnu.gpu-components.v8-host-and-ios-reuse-monotonic-gop-ios17',
-    qualification='FULL_HOST_CONTROLS_PASS_REVIEWED_Q_MONOTONIC_GOP_IOS_REUSE_IOS17_COMPILE_PHYSICAL_GPU_PENDING',
+    schema='unixnu.gpu-components.v9-host-and-ios-reuse-pubfail-warning',
+    qualification='FULL_HOST_CONTROLS_PASS_PUBFAIL_WARNING_DIAGNOSTIC_PHYSICAL_GPU_PENDING',
     host_software_qualification=dict(completed=True, status='PASS', details=host_qualification),
     original_input_qualification=dict(
         required_library='iPadOS17.7.11-21H461 QuartzCore/default.metallib',
@@ -329,7 +346,7 @@ manifest = dict(
         Q_checker_original_byte_identity=False),
     exact_sources=dict(UniXNU=MAIN, device=DEVICE, components=gitlinks, Mesa=MESA,
                        translator=TRANSLATOR, overlays=overlays),
-    source_split=dict(mode='complete host controls with authenticated C6 host and v6 iOS library reuse, reviewed Q layout, monotonic watchdog and fixed GOP dependency, OS17-only compile compatibility',
+    source_split=dict(mode='complete host controls with authenticated C6 host and v6 iOS library reuse, reviewed Q layout, monotonic watchdog and fixed GOP dependency, OS17-only compile compatibility, published-device last-warning diagnostics',
         build_prefix_substitution=True,
         build_prefix_substitution_scope='cached host and exact iOS library compilation/provisioning only; no control-suite or final plugin/daemon compile/sign omitted',
         test_suite_prefix_substitution=False,
@@ -342,6 +359,7 @@ manifest = dict(
         plugin_built_in_this_run=True, probe_daemon_built_in_this_run=True,
         gop_build_dependency=gop_dependency,
         plugin_compile_compatibility=plugin_compile_compatibility,
+        plugin_warning_diagnostics=plugin_warning_diagnostics,
         replay_diagnostics=dict(original_sha256=replay_before, patched_sha256=sha(replay_source),
             original_runtime_call_environment_timeout_and_RD_criteria_unchanged=True),
         hostsim_VA_configuration_only=True,
@@ -372,6 +390,6 @@ manifest = dict(
     created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat())
 (output / 'input-output-manifest.json').write_text(json.dumps(manifest, indent=2))
 (output / 'REQUIRED_PENDING_PHYSICAL_GPU_QUALIFICATION.txt').write_text(
-    'CANDIDATE ONLY. Full host controls passed with authenticated C6 host and v6 iOS library reuse, reviewed Q cache layout, monotonic watchdog correction and fixed GOP headers and OS17 compile compatibility; physical GPU and installation qualification remain required.\n')
+    'CANDIDATE ONLY. Full host controls passed with authenticated C6 host and v6 iOS library reuse, reviewed Q cache layout, monotonic watchdog correction and fixed GOP headers and OS17 compile compatibility; published-device last-warning diagnostics added. Physical GPU and installation qualification remain required.\n')
 print(json.dumps(dict(status=manifest['status'], qualification=manifest['qualification'],
                      binaries=identities), indent=2))
