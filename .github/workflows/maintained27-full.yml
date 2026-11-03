@@ -1,0 +1,148 @@
+name: Maintained OS27 full package - provisional
+# Derived from upstream/package.yml at ba66a660. No device secrets or prior images.
+on:
+  push:
+    branches: [maintained27-full]
+    paths: ['.github/workflows/maintained27-full.yml', 'ci/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: maintained27-full-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  boot:
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: f61fd6c1be8a18ec83c4a80bd7355cbf5d435d63
+          path: UniXNU
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sheng
+          ref: ba66a66089e5bb6690d021344188ca7776932931
+          path: device
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/uefi-sheng
+          ref: 66421cb7bb5694843aec8de1ca3d1de4c20cca38
+          path: uefi-sheng
+          submodules: recursive
+          persist-credentials: false
+      - name: Author tool installation
+        run: |
+          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/lld/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+          } >> "$GITHUB_PATH"
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Check tools and prepare frozen storage-only adaptation
+        run: |
+          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool mformat mcopy ipsw lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
+            command -v "$t"
+          done
+          python3 pipeline/ci/prepare.py
+      - name: Complete official OS27 build with fresh 215 GiB logical Data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 pipeline/ci/package.py boot
+      - name: Preserve provisional handoff for local personalization
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-provisional-handoff
+          path: handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-boot-build-evidence
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 3
+  root:
+    needs: boot
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: f61fd6c1be8a18ec83c4a80bd7355cbf5d435d63
+          path: UniXNU
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sheng
+          ref: ba66a66089e5bb6690d021344188ca7776932931
+          path: device
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/uefi-sheng
+          ref: 66421cb7bb5694843aec8de1ca3d1de4c20cca38
+          path: uefi-sheng
+          submodules: recursive
+          persist-credentials: false
+      - name: Author tool installation
+        run: |
+          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/lld/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+          } >> "$GITHUB_PATH"
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Check tools and prepare frozen storage-only adaptation
+        run: |
+          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool mformat mcopy ipsw lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
+            command -v "$t"
+          done
+          python3 pipeline/ci/prepare.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: os27-provisional-handoff
+          path: handoff
+      - name: Original OS and SystemOS root with authenticated author tables
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 pipeline/ci/package.py root
+      - uses: actions/upload-artifact@v4
+        with:
+          name: os27-complete-root
+          path: full-root/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Root build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-root-build-evidence
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 3

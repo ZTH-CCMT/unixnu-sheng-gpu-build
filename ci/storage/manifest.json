@@ -1,0 +1,69 @@
+{
+  "schema": "unixnu.storage-adaptation.v1",
+  "status": "THREE_MINIMAL_PATCHES_HOST_CHECKED_NOT_DEVICE_VERIFIED",
+  "scope": "Only runtime root GPT name, board host geometry and host target-report metadata. No GPU/kernel/timing/cache/trust changes.",
+  "geometry_status": "PROPOSED_320GIB_NOT_LIVE_VERIFIED",
+  "target_partition": "unixnu",
+  "sector_bytes": 4096,
+  "first_lba": 173859584,
+  "last_lba": 257745663,
+  "capacity_bytes": 343597383680,
+  "data_gib_unchanged": 215,
+  "owned_memory_unchanged": "0x130000000",
+  "changes": [
+    {
+      "repository": "ShengUfs",
+      "commit": "99d8bcd3e43dd24fc3c8437c67b5d4cc71ab94d0",
+      "path": "RootLayout.h",
+      "patch": "01-shengufs-unixnu-selector.patch",
+      "before_sha256": "a188e7886917d5b8e02f6e7dbab648f5b6ca798584557f1216f5abfcdde67ea9",
+      "after_sha256": "385ccd6f5b1f6f1477e1f54c79f19531103f85ecdc422e17e89958b04ca15a85",
+      "patch_sha256": "5da2cda2b5a642d6d47d98792133d0b4d64f3f5abdeee1ca075dbaffa30d9e8a",
+      "replacement_count": 5
+    },
+    {
+      "repository": "UniXNU-sheng",
+      "commit": "ba66a66089e5bb6690d021344188ca7776932931",
+      "path": "board.toml",
+      "patch": "02-board-unixnu320-geometry.patch",
+      "before_sha256": "ea31698bc05970c11b19e07ca31caa55f41da1060c19ef0565132ced2a6db93c",
+      "after_sha256": "967a1e605671f1113c1273a65769bcdb3bd903ebddbd8feb3f69b6865590c977",
+      "patch_sha256": "1fdb1afc4cc6cdcd884f7a0920d38cbc01592fe409b9056b99b28bb6af0f0d20",
+      "replacement_count": 1
+    },
+    {
+      "repository": "UniXNU",
+      "commit": "f61fd6c1be8a18ec83c4a80bd7355cbf5d435d63",
+      "path": "scripts/unixnu/userdata.py",
+      "patch": "03-root-image-target-report.patch",
+      "before_sha256": "637b1e62e05f3632fae6eab14024147811fcef3d2778acc571374d71ed0aa96a",
+      "after_sha256": "430416c265f7387bf07dd05553bdf7002d7e24b337fdf8d609292ab61b1de781",
+      "patch_sha256": "3149366fcdd95a135f6bac0bc2dc63d6d48d9166b21e89ef2ecc104984f4d3ac",
+      "replacement_count": 4
+    }
+  ],
+  "source_originals_unchanged": true,
+  "apply_order": [
+    "01-shengufs-unixnu-selector.patch",
+    "02-board-unixnu320-geometry.patch",
+    "03-root-image-target-report.patch"
+  ],
+  "integration_notes": [
+    "Apply each patch in its named repository after checking pinned HEAD and before_sha256.",
+    "ShengUfs path is device repository drivers/ShengUfs; apply there before building the resolved tree.",
+    "Main root image command is a separate official build userdata step with OS.vroot and SystemOS.vroot hash-table objects.",
+    "Never infer fresh device geometry from this proposal. No device writer or partition application is included."
+  ],
+  "host_checks": {
+    "file": "host-checks.json",
+    "sha256": "03320b69d822f893604bf9b0f1d41d16816f4e3c3ce2e2938a34db5f6b79ebc8",
+    "count": 12
+  },
+  "verifier_sha256": "a9014674b31fc183bf5b0b5610edb0479794454fa436d5bb36194fd97ad48164",
+  "packed_ramdisk_source": {
+    "repository": "UniXNU/DarwinBoot",
+    "commit": "3c75734014cdab0acd9541e88057b7606ee7ae08",
+    "path": "Test/packed_ramdisk.py",
+    "sha256": "efb5fac21ae94dcb1aecd47da2b73a7112b487e43692ac6396858552d27a0e48"
+  }
+}
