@@ -7,3 +7,5 @@ The complete host suite, additional QuartzCore/priming controls, reviewed Q cach
 Outputs are candidate components only. Installation, device GPU execution and any reboot/flash/reset require separate review and user timing. No downloaded binary is automatically installed. The build preserves the original source pins and explicitly records all source overlays, including the watchdog header correction.
 
 The complete fixed GopFramebuffer submodule is now initialized for both NativeGOPWire and NativeHalfCodes headers. Previously compiled ordinary ARM64/iOS17 Turnip and bridge inputs are reused only after fixed v6 run/artifact/hash/target checks; final plugin and probe daemon are genuinely compiled and signed in this run. No Cargo/Mesa fallback is hidden, and reused libraries are explicitly marked not rebuilt.
+
+The OS27-only patchFramebufferBranch helper receives the standard C++17 [[maybe_unused]] annotation, because its sole arm64e call is excluded from OS17. No warning option, Werror, function body or runtime call site is changed. The exact before/after source hashes and this compatibility change are recorded in the candidate manifest.
