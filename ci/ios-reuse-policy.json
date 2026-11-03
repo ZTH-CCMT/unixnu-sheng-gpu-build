@@ -1,0 +1,260 @@
+{
+  "schema": "unixnu.v7.authenticated-v6-ios-build-input-policy.v1",
+  "repository": "ZTH-CCMT/unixnu-sheng-gpu-build",
+  "run_id": 41567100547,
+  "run_attempt": 1,
+  "source_commit": "c4ad3f9bc4c9e156d16ac9f5d23935e493f89cdf",
+  "artifact_id": 13201310188,
+  "artifact_name": "unixnu-os17-gpu-FAILED-RECOVERABLE-41567100547",
+  "archive_bytes": 127632346,
+  "archive_sha256": "55ba1eaa4f22a07910a33cb3278746eab72a307515c339d075d6fe3d7c4dd9dc",
+  "manifest_sha256": "abf936edc0e31d52f447a5e7f22c3eb510f545e903b0a8cdbb41d90e0f6d54ca",
+  "expected_zip_names": [
+    "ONLY_RECOVERY_NOT_INSTALL_READY.txt",
+    "phase-logs/bridge-host-reused.json",
+    "phase-logs/bridge-host-source-manifest-only.log",
+    "phase-logs/exact-component-checkouts.log",
+    "phase-logs/full-author-host-suite.log",
+    "phase-logs/host-build-reuse.json",
+    "phase-logs/host-reuse-codesign-0.log",
+    "phase-logs/host-reuse-codesign-1.log",
+    "phase-logs/host-reuse-codesign-5.log",
+    "phase-logs/host-reuse-codesign-6.log",
+    "phase-logs/host-reuse-codesign-detail-0.log",
+    "phase-logs/host-reuse-codesign-detail-1.log",
+    "phase-logs/host-reuse-codesign-detail-5.log",
+    "phase-logs/host-reuse-codesign-detail-6.log",
+    "phase-logs/host-reuse-current-compiler.log",
+    "phase-logs/host-reuse-current-os.log",
+    "phase-logs/host-reuse-current-sdk.log",
+    "phase-logs/host-reuse-dependency-codesign.log",
+    "phase-logs/host-reuse-ir3_delay_test-revalidation.log",
+    "phase-logs/host-reuse-ir3_disasm-revalidation.log",
+    "phase-logs/host-reuse-source-tool-setup.log",
+    "phase-logs/host-reuse-spirv-version.log",
+    "phase-logs/original-input-provenance.json",
+    "phase-logs/plugin-ios17.log",
+    "phase-logs/preserved-priming-qualification.log",
+    "phase-logs/preserved-quartzcore-qualification.log",
+    "phase-logs/priming-host-checkpoint.json",
+    "phase-logs/quartzcore-host-checkpoint.json",
+    "phase-logs/real-sdk-link.log",
+    "phase-logs/real-sdk-sign.log",
+    "phase-logs/translator-checkout.log",
+    "phase-logs/translator-exact-fetch.log",
+    "phase-logs/translator-init.log",
+    "phase-logs/translator-origin.log",
+    "phase-logs/turnip-ios17.log",
+    "producer-logs/.cache__mesa-tu-ios-build.log",
+    "producer-logs/.cache__mesa-tu-ios-configure.log",
+    "producer-logs/build__adreno-metal-bridge__build-ios.log",
+    "producer-logs/build__ci-preserved-original-qualification__priming__checksum-miss.log",
+    "producer-logs/build__ci-preserved-original-qualification__priming__cold-miss.log",
+    "producer-logs/build__ci-preserved-original-qualification__priming__consume.log",
+    "producer-logs/build__ci-preserved-original-qualification__priming__produce.log",
+    "producer-logs/build__ci-preserved-original-qualification__priming__truncated-miss.log",
+    "producer-logs/build__ci-preserved-original-qualification__priming__uuid-miss.log",
+    "producer-logs/build__ci-preserved-original-qualification__quartzcore__consume.log",
+    "producer-logs/build__ci-preserved-original-qualification__quartzcore__empty-driver.log",
+    "producer-logs/build__ci-preserved-original-qualification__quartzcore__produce.log",
+    "producer-logs/build__ci-preserved-original-qualification__quartzcore__uuid-miss.log",
+    "producer-logs/build__turnip-darwin-host__deferred-busy.log",
+    "producer-logs/build__turnip-darwin-host__deferred-fence-error.log",
+    "producer-logs/build__turnip-darwin-host__deferred-free-error.log",
+    "producer-logs/build__turnip-darwin-host__deferred-lease-error.log",
+    "producer-logs/build__turnip-darwin-host__deferred-map-cleanup-error.log",
+    "producer-logs/build__turnip-darwin-host__deferred-normal.log",
+    "producer-logs/build__turnip-darwin-host__deferred-pressure.log",
+    "producer-logs/build__turnip-darwin-host__deferred-view-error.log",
+    "producer-logs/build__turnip-darwin-host__pipeline-cache-consume.log",
+    "producer-logs/build__turnip-darwin-host__pipeline-cache-produce.log",
+    "producer-logs/build__turnip-darwin-host__pipeline-cache-report.json",
+    "producer-logs/build__turnip-darwin-host__pipeline-cache-shader-miss.log",
+    "producer-logs/build__turnip-darwin-host__pipeline-cache-uuid-miss.log",
+    "producer-logs/build__turnip-darwin-host__plugin_smoke.log",
+    "producer-logs/build__turnip-darwin-host__plugin_watchdog.log",
+    "producer-logs/build__turnip-darwin-host__smoke.log",
+    "producer-logs/build__ui-shader-coverage__turnip-graphics__last-consume.log",
+    "producer-logs/build__ui-shader-coverage__turnip-graphics__last-empty-driver.log",
+    "producer-logs/build__ui-shader-coverage__turnip-graphics__last-produce.log",
+    "producer-logs/build__ui-shader-coverage__turnip-graphics__last-uuid-miss.log",
+    "public-build/build/adreno-metal-bridge/Cargo.lock",
+    "public-build/build/adreno-metal-bridge/host/libadreno_metal_bridge.a",
+    "public-build/build/adreno-metal-bridge/ios/libadreno_metal_bridge.a",
+    "public-build/build/mesa-ir3/host-report.json",
+    "public-build/build/ci-sdk-probe/probe",
+    "public-build/build/mesa-ir3/src/freedreno/ir3/ir3_delay_test",
+    "public-build/build/mesa-ir3/src/freedreno/ir3/ir3_disasm",
+    "public-build/build/mesa-tu/builtin-build-profile.json",
+    "public-build/build/mesa-tu/src/freedreno/vulkan/libvulkan_freedreno.dylib",
+    "public-build/build/mesa-tu-ios/builtin-build-profile.json",
+    "public-build/build/mesa-tu-ios/src/freedreno/vulkan/libvulkan_freedreno.dylib",
+    "public-build/build/turnip-darwin-host/libhostiokit.dylib",
+    "public-build/build/turnip-darwin-host/plugin_smoke",
+    "public-build/build/turnip-darwin-host/vulkan_smoke",
+    "recovery-manifest.json"
+  ],
+  "expected_optional_omissions": [],
+  "expected_pins": {
+    "UniXNU": "6790e7ce6e77f67a9174fba1255e64eacf1c41ad",
+    "device": "28b30285768e04008ac525c04182e245bfac441e",
+    "Mesa": "85fda3b36405bcaea8bffc64aa4f2651dc90770d",
+    "translator": "624bab3918de5b978e1101517abca2b4fa426565",
+    "components": {
+      "drivers/Adreno740": "a9a2cbb43b89d672e2921e19721a6438b738b17f",
+      "drivers/AdrenoMetal": "a0f0287be80a5d8aef5c6b97a6cab62129e152bd",
+      "kits/AdrenoPM4": "282606b528b2595bc4274ea7490b62b323f35a5f",
+      "kits/ArmSmmu4K": "83969cd874503e65997ff7639f7dcf3d0a92cd17"
+    }
+  },
+  "current_required_components": {
+    "drivers/Adreno740": "a9a2cbb43b89d672e2921e19721a6438b738b17f",
+    "drivers/AdrenoMetal": "a0f0287be80a5d8aef5c6b97a6cab62129e152bd",
+    "kits/AdrenoPM4": "282606b528b2595bc4274ea7490b62b323f35a5f",
+    "kits/ArmSmmu4K": "83969cd874503e65997ff7639f7dcf3d0a92cd17",
+    "drivers/GopFramebuffer": "19ef3a75ad2c53da85b8d923553d922716fce377"
+  },
+  "required": {
+    "public-build/build/mesa-tu-ios/src/freedreno/vulkan/libvulkan_freedreno.dylib": {
+      "bytes": 17898152,
+      "sha256": "a580d475b3610581da476e63364129840ee8467075c82be0cbbc1644958d2b05",
+      "macho": {
+        "filetype": 6,
+        "builds": [
+          [
+            2,
+            1114112,
+            1705216
+          ]
+        ],
+        "dependencies": [
+          "/usr/lib/libSystem.B.dylib",
+          "/usr/lib/libz.1.dylib",
+          "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit",
+          "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+          "/System/Library/Frameworks/QuartzCore.framework/QuartzCore",
+          "/System/Library/Frameworks/Metal.framework/Metal",
+          "/usr/lib/libc++.1.dylib",
+          "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+          "/usr/lib/libobjc.A.dylib"
+        ],
+        "rpaths": []
+      }
+    },
+    "public-build/build/adreno-metal-bridge/ios/libadreno_metal_bridge.a": {
+      "bytes": 222101696,
+      "sha256": "740e8042ae40629e3a9fb8bb0727142b3e6225832094c7f9570ffc17886515f7"
+    },
+    "public-build/build/mesa-tu-ios/builtin-build-profile.json": {
+      "bytes": 1977,
+      "sha256": "fd7295dba3338c6b5f1d691ef1d39bb0398c44e5adba5998079c34aefd6439f9"
+    }
+  },
+  "ios_profile": {
+    "source_id": "07c27d4c124b0693be4393bdc2bb4abcb0dc4a6f21a60a852f9744973c4664c1",
+    "profile": {
+      "mesa_revision": "85fda3b36405bcaea8bffc64aa4f2651dc90770d",
+      "target": "ios",
+      "source_diff_sha256": "e690a894d93f9df255242406f1a06c401e5c45b0c4c3b112043e3d28e66b8bac",
+      "extra_sources": {
+        "src/freedreno/vulkan/tu_builtin_cache.cc": "ec56464c03c9a7e9dda8ca6fd7887445c7c9a277c9aca7654ba07fef3671bfbd",
+        "src/freedreno/vulkan/tu_builtin_cache.h": "4019dbc884f9a8c51d3ad6d71f46738303e5888b4ee5e65c1c820ec77977a151",
+        "src/freedreno/vulkan/tu_knl_darwin.cc": "4074263dab8d87cff7187bb89f895024f71e6396871f4d1f5782e40e1168adf8"
+      },
+      "patch_guard_sha256": "60f03967f4d2b56807b7b3d984181792cb810abbbc6392161d4c82b03d4433a7",
+      "compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.6.0\nThread model: posix\nInstalledDir: /Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "options": [
+        "-Dgallium-drivers=",
+        "-Dvulkan-drivers=freedreno",
+        "-Dfreedreno-kmds=darwin",
+        "-Dtu-darwin-abi-dir=/Users/runner/work/unixnu-sheng-gpu-build/unixnu-sheng-gpu-build/upstream/drivers/Adreno740",
+        "-Dplatforms=macos",
+        "-Dglx=disabled",
+        "-Degl=disabled",
+        "-Dgbm=disabled",
+        "-Dopengl=false",
+        "-Dgles1=disabled",
+        "-Dgles2=disabled",
+        "-Dllvm=disabled",
+        "-Dshared-glapi=disabled",
+        "-Dxmlconfig=disabled",
+        "-Dshader-cache=disabled",
+        "-Dtools=",
+        "-Dbuild-tests=false",
+        "-Dvideo-codecs=",
+        "-Dvulkan-layers=",
+        "-Dlibunwind=disabled",
+        "-Dlmsensors=disabled",
+        "-Dvalgrind=disabled",
+        "-Dexpat=disabled",
+        "-Dzstd=disabled",
+        "-Dbuildtype=release",
+        "-Db_ndebug=true"
+      ],
+      "build_script_sha256": "404a9b3b773cd03c308258b171401a349f236ff987fe0ed4d970ed8fe38b9035"
+    },
+    "embedded_pack_sha256": null,
+    "builtin_pack_required": false
+  },
+  "iphoneos_sdk_version": "26.5",
+  "Cargo_lock_sha256": "30552926ea905c1fb364f83a46a29552cc6e1772da3145f120b5e252fb89c7c7",
+  "ios_bridge_AR_target_inventory": {
+    "members": 375,
+    "BSD_extended_name_members": 375,
+    "member_types": {
+      "metadata": 1,
+      "MachO": 374
+    },
+    "all_actual_MachO_objects_ordinary_ARM64": true,
+    "all_actual_MachO_platform_iOS": true,
+    "all_actual_MachO_minimum_OS_at_most17": true,
+    "target_distribution": [
+      {
+        "command": "LC_BUILD_VERSION",
+        "platform": 2,
+        "minimum_os_packed": 1114112,
+        "minimum_os": "17.0.0",
+        "sdk_packed": 0,
+        "sdk": "0.0.0",
+        "members": 1
+      },
+      {
+        "command": "LC_VERSION_MIN_IPHONEOS",
+        "platform": 2,
+        "minimum_os_packed": 655360,
+        "minimum_os": "10.0.0",
+        "sdk_packed": 0,
+        "sdk": "0.0.0",
+        "members": 329
+      },
+      {
+        "command": "LC_VERSION_MIN_IPHONEOS",
+        "platform": 2,
+        "minimum_os_packed": 655360,
+        "minimum_os": "10.0.0",
+        "sdk_packed": 1704448,
+        "sdk": "26.2.0",
+        "members": 44
+      }
+    ],
+    "LLVM_bitcode_wrapper_count": 0,
+    "raw_LLVM_bitcode_count": 0
+  },
+  "independent_AR_target_review_sha256": "c22d2bce928c5b8cc95b711a70d9ead9298c75c2a11b342264fd16e9ce93ddfb",
+  "raw_iOS_Turnip_has_no_LC_CODE_SIGNATURE": true,
+  "final_plugin_and_daemon_compile_link_signatures_required": true,
+  "original_plugin_build_script_sha256": "f778be6956f3c4ce28a6f13c4a57aa326350985ace5225faf8ff9f9e809f5d33",
+  "patched_plugin_build_script_sha256": "95a5209bd5755a907b537550ae86abaa991b3d77061bdb1a16d23ef9a7ea07ef",
+  "build_only_substitution": {
+    "original_command": "subprocess.run(['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET], check=True)",
+    "replacement_command": "subprocess.run(['python3', ROOT / 'scripts/verify-reused-ios-bridge.py', '--target', BRIDGE_TARGET], check=True)",
+    "runtime_source_changed": false,
+    "Cargo_fallback_allowed": false
+  },
+  "current_GOP_headers": {
+    "drivers/GopFramebuffer/NativeGOPWire.h": "b9507abef1a2ae9fb086bcc6d571e52fba9a26df94869a56209a38d45af4aa52",
+    "drivers/GopFramebuffer/NativeHalfCodes.h": "2de0ed204623939c23a154f94818251a5af6fa36f51200f4c60e45f4bbb91eb3"
+  },
+  "installation_ready": false,
+  "hardware_GPU_execution_verified": false
+}

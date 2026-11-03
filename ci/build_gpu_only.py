@@ -4,6 +4,7 @@ from pathlib import Path
 from verify_gpu_artifacts import check, require
 from qualify_gpu_host import matching_original_input, qualify_author_host
 from reuse_frozen_host import prepare_frozen_host, setup_source_tools_and_revalidate_IR3, verify_reused_host_inputs, reviewed_Q_adapter_record
+from reuse_frozen_ios import prepare_frozen_ios, verify_frozen_ios_inputs, apply_plugin_bridge_reuse
 
 MAIN = '6790e7ce6e77f67a9174fba1255e64eacf1c41ad'
 DEVICE = '28b30285768e04008ac525c04182e245bfac441e'
@@ -102,7 +103,7 @@ run(['codesign', '--force', '--sign', '-', '--pagesize', '4096',
      probe_dir / 'probe'], 'real-sdk-sign', 30)
 probe_identity = check(probe_dir / 'probe', 2)
 
-selected = ['drivers/Adreno740', 'drivers/AdrenoMetal', 'kits/AdrenoPM4', 'kits/ArmSmmu4K']
+selected = ['drivers/Adreno740', 'drivers/AdrenoMetal', 'kits/AdrenoPM4', 'kits/ArmSmmu4K', 'drivers/GopFramebuffer']
 run(['git', 'submodule', 'update', '--init', '--recursive', '--', *selected],
     'exact-component-checkouts', 600)
 gitlinks = {}
@@ -114,6 +115,13 @@ for p in selected:
     require(read(['git', 'status', '--porcelain'], root / p) == '', 'Dirty component ' + p)
     gitlinks[p] = actual
 
+require(gitlinks['drivers/GopFramebuffer'] == '19ef3a75ad2c53da85b8d923553d922716fce377', 'Wrong fixed GOP header dependency')
+gop_dependency = dict(path='drivers/GopFramebuffer', commit=gitlinks['drivers/GopFramebuffer'],
+    wire_header_sha256=sha(root / 'drivers/GopFramebuffer/NativeGOPWire.h'),
+    half_codes_header_sha256=sha(root / 'drivers/GopFramebuffer/NativeHalfCodes.h'))
+require(gop_dependency['wire_header_sha256'] == 'b9507abef1a2ae9fb086bcc6d571e52fba9a26df94869a56209a38d45af4aa52' and
+        gop_dependency['half_codes_header_sha256'] == '2de0ed204623939c23a154f94818251a5af6fa36f51200f4c60e45f4bbb91eb3',
+        'Fixed GOP quoted header closure differs')
 # Assemble only the device host compiler/probe input, keeping producer sources intact.
 source = device / 'scripts/build-adreno-compiler-host.py'
 target = root / 'scripts/build-adreno-compiler-host.py'
@@ -193,6 +201,8 @@ require(artifact_token is not None, 'Fixed C6 artifact token missing')
 # No generic build subprocess inherits the read-only API token.
 receipt_env = dict(env, GH_ARTIFACT_TOKEN=artifact_token)
 host_reuse, host_reuse_policy = prepare_frozen_host(root, a.source_plan.resolve(), logs, receipt_env)
+ios_reuse = prepare_frozen_ios(root, logs, artifact_token)
+overlays.update(apply_plugin_bridge_reuse(root))
 artifact_token = None
 setup_source_tools_and_revalidate_IR3(root, logs, run, env, host_reuse, host_reuse_policy)
 require(read(['git', 'rev-parse', 'HEAD'], root / '.cache/mesa-work') == MESA, 'Mesa pin differs')
@@ -213,18 +223,19 @@ run([sys.executable, 'scripts/build-adreno-metal-bridge.py', '--target', 'host',
     'bridge-host-source-manifest-only', 180)
 verify_reused_host_inputs(root, host_reuse)
 
-# All complete host control commands execute; only authenticated host-build production is reused.
+# All complete host controls execute; only exact authenticated host and iOS input-library builds are reused.
 with matching_original_input(root, logs) as original_input:
     host_qualification = qualify_author_host(root, device, logs, run, host_reuse)
 require(original_input['cleanup_completed'], 'Owned original-input cleanup must complete')
 require(sha(watchdog_path) == watchdog_patched, 'Watchdog source changed during complete host controls')
 overlays['scripts/check-quartzcore-turnip-cache-host.py'] = host_qualification['checker_sources']['check-quartzcore-turnip-cache-host.py']
 require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Qualified host replay peer missing')
-run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'ios'],
-    'turnip-ios17', 1800)
+# Exact already-built iOS libraries are authenticated and reused, never reported as freshly compiled.
+verify_frozen_ios_inputs(root, ios_reuse)
 run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
     'plugin-ios17', 2400)
 require(sha(watchdog_path) == watchdog_patched, 'Watchdog source changed during iOS production')
+verify_frozen_ios_inputs(root, ios_reuse)
 verify_reused_host_inputs(root, host_reuse, allow_rebuilt_peer=True)
 producer = root / 'build/adreno-metal-plugin'
 bundle = producer / 'NativeAdrenoMetal.bundle'
@@ -289,8 +300,8 @@ output_hashes = {str(p.relative_to(output)): dict(bytes=p.stat().st_size, sha256
                  for p in sorted(output.rglob('*')) if p.is_file()}
 manifest = dict(
     status='CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY',
-    schema='unixnu.gpu-components.v6-host-reuse-q-layout-monotonic-watchdog',
-    qualification='FULL_HOST_CONTROLS_PASS_REVIEWED_Q_LAYOUT_MONOTONIC_WATCHDOG_PHYSICAL_GPU_PENDING',
+    schema='unixnu.gpu-components.v7-host-and-ios-reuse-monotonic-gop',
+    qualification='FULL_HOST_CONTROLS_PASS_REVIEWED_Q_MONOTONIC_GOP_IOS_REUSE_PHYSICAL_GPU_PENDING',
     host_software_qualification=dict(completed=True, status='PASS', details=host_qualification),
     original_input_qualification=dict(
         required_library='iPadOS17.7.11-21H461 QuartzCore/default.metallib',
@@ -303,14 +314,18 @@ manifest = dict(
         Q_checker_original_byte_identity=False),
     exact_sources=dict(UniXNU=MAIN, device=DEVICE, components=gitlinks, Mesa=MESA,
                        translator=TRANSLATOR, overlays=overlays),
-    source_split=dict(mode='complete host controls with authenticated C6 host build reuse and reviewed Q cache layout adapter',
+    source_split=dict(mode='complete host controls with authenticated C6 host and v6 iOS library reuse, reviewed Q layout, monotonic watchdog and fixed GOP dependency',
         build_prefix_substitution=True,
-        build_prefix_substitution_scope='cached host compilation/provisioning only; no control-suite command omitted',
+        build_prefix_substitution_scope='cached host and exact iOS library compilation/provisioning only; no control-suite or final plugin/daemon compile/sign omitted',
         test_suite_prefix_substitution=False,
         whole_host_suite=dict(sha256=host_qualification['host_suite_patched_sha256'], executed=True,
                              all_control_commands_retained=True),
         q_cache_layout_adapter=reviewed_Q_adapter_record(),
         host_build_reuse=host_reuse,
+        ios_build_reuse=ios_reuse,
+        ios_Turnip_built_in_this_run=False, ios_bridge_built_in_this_run=False,
+        plugin_built_in_this_run=True, probe_daemon_built_in_this_run=True,
+        gop_build_dependency=gop_dependency,
         replay_diagnostics=dict(original_sha256=replay_before, patched_sha256=sha(replay_source),
             original_runtime_call_environment_timeout_and_RD_criteria_unchanged=True),
         hostsim_VA_configuration_only=True,
@@ -341,6 +356,6 @@ manifest = dict(
     created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat())
 (output / 'input-output-manifest.json').write_text(json.dumps(manifest, indent=2))
 (output / 'REQUIRED_PENDING_PHYSICAL_GPU_QUALIFICATION.txt').write_text(
-    'CANDIDATE ONLY. Full host controls passed with authenticated C6 host-build reuse, reviewed Q cache layout and a monotonic watchdog timer patch; physical GPU and installation qualification remain required.\n')
+    'CANDIDATE ONLY. Full host controls passed with authenticated C6 host and v6 iOS library reuse, reviewed Q cache layout, monotonic watchdog correction and fixed GOP headers; physical GPU and installation qualification remain required.\n')
 print(json.dumps(dict(status=manifest['status'], qualification=manifest['qualification'],
                      binaries=identities), indent=2))
