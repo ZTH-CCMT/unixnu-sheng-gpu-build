@@ -18,10 +18,17 @@ def policy(header,anchor):
     tail=bytes.fromhex('3031300d060960864801650304020105000420')+hashlib.sha256(header[:160]).digest()
     assert encoded==b'\x00\x01'+b'\xff'*(384-len(tail)-3)+b'\0'+tail,'author RSA signature invalid'
     return dict(size=size,count=count,uuid=str(uuid.UUID(bytes=volume)).upper(),image_sha256=imagehash.hex(),table_sha256=tablehash.hex(),generation=generation)
+def component_map(board):
+    windows={window['name']:window['component'] for window in board['userdata']['windows']}
+    expected={'OS':'OS','SystemOS':'Cryptex1,SystemOS'}
+    assert all(windows.get(name)==component for name,component in expected.items()),'OS27 component mapping differs from author profile'
+    return expected
+
 def create(ctx,out):
     from unixnu.ipsw import Ipsw
     from unixnu.userdata import image_size,disk_blocks
     src=Ipsw(ctx); out.mkdir(parents=True,exist_ok=True); records={}
+    components=component_map(ctx.board)
     policy_dir=TOP/'device/scripts/policies'/PROFILE
     selected=[]
     for name in ('OS','SystemOS'):
@@ -33,11 +40,12 @@ def create(ctx,out):
         assert meta['uuid']==ctx.board['root'][prefix+'_volume_uuid']
         selected.append((name,head,key,meta))
     # Each AEA member and its decrypted DMG may coexist; raw root and compressed output also need room.
-    member_bytes=sum(src.info(name)[1] for name in ('OS','SystemOS'))
+    member_bytes=sum(src.info(components[name])[1] for name in ('OS','SystemOS'))
     root_raw=sum(x[3]['size'] for x in selected)+(8<<20)
+    save(TOP/'evidence/root-resource-plan.json',dict(member_bytes=member_bytes,raw_root_allowance_bytes=root_raw,required_free_bytes=2*member_bytes+2*root_raw+2*GIB,actual_free_bytes=__import__('shutil').disk_usage(TOP).free))
     space(2*member_bytes+2*root_raw+2*GIB,'two root members, decrypted images, raw root and worst-case compressed stream')
     for name,head,key,meta in selected:
-        dmg=src.disk_image(name); size=image_size(dmg)
+        dmg=src.disk_image(components[name]); size=image_size(dmg)
         assert size==meta['size']
         imagehash=hashlib.sha256(); tablehash=hashlib.sha256(); count=0; total=0
         table=out/(name+'.vroot')
