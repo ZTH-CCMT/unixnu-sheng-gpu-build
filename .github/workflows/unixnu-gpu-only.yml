@@ -1,4 +1,4 @@
-name: UniXNU OS17 GPU with explicit C6 host reuse and reviewed Q layout
+name: UniXNU OS17 GPU with monotonic watchdog and reviewed host reuse
 on:
   workflow_dispatch:
   push:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   gpu-components:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build UniXNU OS17 GPU with authenticated C6 host reuse and reviewed Q cache layout 20261102'
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Build UniXNU OS17 GPU with monotonic watchdog and reviewed host reuse 20261103'
     runs-on: macos-26
     timeout-minutes: 120
     env:

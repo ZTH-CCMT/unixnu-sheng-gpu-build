@@ -123,7 +123,7 @@ require(not (root / 'kits/sheng').exists(), 'Unexpected pre-existing board packa
 shutil.copytree(device / 'package', root / 'kits/sheng')
 overlays = {'scripts/build-adreno-compiler-host.py': sha(target)}
 # The pinned host-only fixture predates APIs now used by the pinned driver.
-# Hash-bound test doubles only: production kernel/plugin/Turnip/bridge stay unmodified.
+# This fixture block is host-only; the shared watchdog timer correction is declared separately below.
 fixture = root / 'drivers/Adreno740/tests/XnuMemoryFixture.h'
 fixture_before = 'e316a1d4606c2fa52671fb15855f1d76e2cfd827f6d91f950aaf6452d596b04e'
 fixture_after = '18015ab4e9bc6a276b7c5aaf09571ba84e6d5936ede5f419a211c6dbb808f55f'
@@ -170,6 +170,21 @@ require(sha(replay_source) == replay_before and sha(replay_overlay) == replay_af
         'Unreviewed host replay diagnostics')
 replay_source.write_bytes(replay_overlay.read_bytes())
 overlays['scripts/gen-turnip-replay.py'] = sha(replay_source)
+# Shared plugin smoke watchdog: the original sleep counter missed a real 17s
+# stall. Exact clock-only correction passed the original 17s/one6004/v-frame
+# host gate in a controlled A/B; no Vulkan/Turnip/bridge/kernel algorithm changes.
+watchdog_path = root / 'drivers/AdrenoMetal/NativeTurnipSmoke.h'
+watchdog_original = '4ad86aa579652ce980dd02a30f8b2e9c12cc98c21187cc071dcdb1b71d313c2d'
+watchdog_patched = 'e6672093f9c7089f213c1cdc910614ebd78c008b15da715c9ebcdcbca9056d94'
+watchdog_asset = Path(__file__).resolve().parent / 'watchdog-ab-src/NativeTurnipSmoke.monotonic.h'
+require(sha(watchdog_path) == watchdog_original and sha(watchdog_asset) == watchdog_patched,
+        'Unreviewed shared watchdog monotonic source correction')
+watchdog_path.write_bytes(watchdog_asset.read_bytes())
+overlays['drivers/AdrenoMetal/NativeTurnipSmoke.h'] = sha(watchdog_path)
+watchdog_patch_record = dict(path='drivers/AdrenoMetal/NativeTurnipSmoke.h',
+    original_sha256=watchdog_original, patched_sha256=watchdog_patched,
+    purpose='Use steady_clock elapsed deadlines15/45/90; original17s host predicate retained',
+    original_host_predicate_unchanged=True)
 compiler_inputs = json.loads((root / 'scripts/data/adreno-compiler-inputs.json').read_text())
 translator_inputs = json.loads((root / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())
 require(compiler_inputs['mesa']['commit'] == MESA, 'Wrong Mesa compiler pin')
@@ -202,12 +217,14 @@ verify_reused_host_inputs(root, host_reuse)
 with matching_original_input(root, logs) as original_input:
     host_qualification = qualify_author_host(root, device, logs, run, host_reuse)
 require(original_input['cleanup_completed'], 'Owned original-input cleanup must complete')
+require(sha(watchdog_path) == watchdog_patched, 'Watchdog source changed during complete host controls')
 overlays['scripts/check-quartzcore-turnip-cache-host.py'] = host_qualification['checker_sources']['check-quartzcore-turnip-cache-host.py']
 require((root / 'build/turnip-darwin-host/plugin_smoke').is_file(), 'Qualified host replay peer missing')
 run([sys.executable, 'scripts/build-turnip-darwin.py', '--target', 'ios'],
     'turnip-ios17', 1800)
 run([sys.executable, 'scripts/build-adreno-metal-plugin.py'],
     'plugin-ios17', 2400)
+require(sha(watchdog_path) == watchdog_patched, 'Watchdog source changed during iOS production')
 verify_reused_host_inputs(root, host_reuse, allow_rebuilt_peer=True)
 producer = root / 'build/adreno-metal-plugin'
 bundle = producer / 'NativeAdrenoMetal.bundle'
@@ -272,8 +289,8 @@ output_hashes = {str(p.relative_to(output)): dict(bytes=p.stat().st_size, sha256
                  for p in sorted(output.rglob('*')) if p.is_file()}
 manifest = dict(
     status='CANDIDATE_COMPONENTS_BUILT_SIGNED_NOT_INSTALL_READY',
-    schema='unixnu.gpu-components.v5-host-reuse-reviewed-q-layout',
-    qualification='FULL_HOST_CONTROLS_PASS_REVIEWED_Q_CACHE_LAYOUT_PHYSICAL_GPU_PENDING',
+    schema='unixnu.gpu-components.v6-host-reuse-q-layout-monotonic-watchdog',
+    qualification='FULL_HOST_CONTROLS_PASS_REVIEWED_Q_LAYOUT_MONOTONIC_WATCHDOG_PHYSICAL_GPU_PENDING',
     host_software_qualification=dict(completed=True, status='PASS', details=host_qualification),
     original_input_qualification=dict(
         required_library='iPadOS17.7.11-21H461 QuartzCore/default.metallib',
@@ -301,7 +318,8 @@ manifest = dict(
                                   for relative, asset, before_sha, after_sha in host_link_repairs],
         host_fixture_compatibility=dict(original_sha256=fixture_before, patched_sha256=sha(fixture),
             role_constants_sha256=sha(host_private), default_role='explicit host unmanaged; not real OS task role'),
-        plugin_Turnip_bridge_sources_modified=False),
+        plugin_Turnip_bridge_sources_modified=True,
+        watchdog_monotonic_patch=watchdog_patch_record),
     toolchain=dict(platform=platform.platform(), sdk=str(sdk),
         sdk_version=read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-version']),
         sdk_settings_sha256=sha(sdk / 'SDKSettings.plist'),
@@ -323,6 +341,6 @@ manifest = dict(
     created_utc=datetime.datetime.now(datetime.timezone.utc).isoformat())
 (output / 'input-output-manifest.json').write_text(json.dumps(manifest, indent=2))
 (output / 'REQUIRED_PENDING_PHYSICAL_GPU_QUALIFICATION.txt').write_text(
-    'CANDIDATE ONLY. Full host controls passed with the reviewed Q cache-layout adapter and authenticated C6 host-build reuse; physical GPU and installation qualification remain required.\n')
+    'CANDIDATE ONLY. Full host controls passed with authenticated C6 host-build reuse, reviewed Q cache layout and a monotonic watchdog timer patch; physical GPU and installation qualification remain required.\n')
 print(json.dumps(dict(status=manifest['status'], qualification=manifest['qualification'],
                      binaries=identities), indent=2))
