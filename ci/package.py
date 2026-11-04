@@ -7,6 +7,49 @@ def copy(src,dst):
     shutil.copyfile(src,dst)
 def file_manifest(root):
     return {str(p.relative_to(root)):{'bytes':p.stat().st_size,'sha256':digest(p)} for p in sorted(root.rglob('*')) if p.is_file()}
+def compiled_inputs(ctx):
+    runtime=json.loads((ctx.work/'runtime/inputs.json').read_text())
+    allowed={'.config':ctx.config_path,'kernel/kernel.macho':ctx.work/'kernel/kernel.macho',
+             'provisional/DO-NOT-BOOT-payload.img':ctx.work/'payload/payload.img',
+             'root-policies.bin':ctx.tree/'build/sheng-source-storage/root-policies.bin',
+             'sheng.dtb':ctx.tree/'build/sheng/sheng.dtb',
+             'SILICIUM_UEFI.fd':TOP/'uefi-sheng'/ctx.board['firmware']['fd'].format(target=ctx.args.target)}
+    for label,name in [('data_ramdisk','data.dbr'),('trust_cache','trust-cache.bin'),('gpu_addon','gpu-addon.bin')]:
+        item=runtime['inputs'][label]; assert digest(item['path'])==item['sha256']
+        allowed[name]=Path(item['path'])
+    return allowed, runtime
+
+def preserve_compiled():
+    """Keep complete, unpersonalized build inputs after a packaging failure."""
+    ctx = context()
+    if not (ctx.work / "runtime/inputs.json").is_file():
+        print("Runtime inputs are incomplete.")
+        return
+    allowed, runtime = compiled_inputs(ctx)
+    if not all(Path(path).is_file() for path in allowed.values()):
+        print("Compiled inputs are incomplete.")
+        return
+
+    sys.path.insert(0, str(TOP / "UniXNU/drivers/DarwinBoot/Test"))
+    import packed_ramdisk
+    logical, _ = packed_ramdisk.regions(Path(allowed["data.dbr"]).read_bytes())
+    assert logical == 215 * GIB
+    assert Path(allowed["SILICIUM_UEFI.fd"]).stat().st_size == 0x300000
+    staging = TOP / ".compiled-components.partial"
+    staging.mkdir()
+    for name, path in allowed.items():
+        copy(path, staging / name)
+    save(staging / "compiled-components.json", dict(
+        status="PROVISIONAL_COMPILED_INPUTS_NOT_AN_INSTALLER",
+        source_pins=PINS,
+        synthetic_platform_seed=SYNTHETIC,
+        data_volume_uuid=runtime["data_volume_uuid"],
+        data_logical_bytes=logical,
+        requires_verified_boot_pack=True,
+        files=file_manifest(staging),
+    ))
+    staging.rename(TOP / "compiled-components")
+
 def boot():
     space(7609308281+2*GIB,'known firmware archive plus 2 GiB working margin; this is a lower bound, full build peak is not yet measured')
     os.environ['UNIXNU_UNIQUE_CHIP_ID']=SYNTHETIC
@@ -14,17 +57,11 @@ def boot():
     ctx=context(); out=TOP/'handoff'
     save(TOP/'evidence/resolved-build.json',json.loads(capture('python3',TOP/'UniXNU/unixnu','status','-D',TOP/'device','--os','27','--json')))
     out.mkdir(exist_ok=True)
-    runtime=json.loads((ctx.work/'runtime/inputs.json').read_text())
-    allowed={'.config':ctx.config_path,'kernel/kernel.macho':ctx.work/'kernel/kernel.macho',
-             'provisional/DO-NOT-BOOT-boot.img':ctx.work/'boot/boot.img',
-             'provisional/DO-NOT-BOOT-payload.img':ctx.work/'payload/payload.img',
-             'author-package.manifest.json':ctx.work/'package.manifest.json',
-             'root-policies.bin':ctx.tree/'build/sheng-source-storage/root-policies.bin',
-             'sheng.dtb':ctx.tree/'build/sheng/sheng.dtb',
-             'SILICIUM_UEFI.fd':TOP/'uefi-sheng'/ctx.board['firmware']['fd'].format(target=ctx.args.target)}
-    for label,name in [('data_ramdisk','data.dbr'),('trust_cache','trust-cache.bin'),('gpu_addon','gpu-addon.bin')]:
-        item=runtime['inputs'][label]; assert digest(item['path'])==item['sha256']
-        allowed[name]=Path(item['path'])
+    allowed, runtime = compiled_inputs(ctx)
+    allowed.update({
+        "provisional/DO-NOT-BOOT-boot.img": ctx.work / "boot/boot.img",
+        "author-package.manifest.json": ctx.work / "package.manifest.json",
+    })
     for dst,src in allowed.items(): copy(src,out/dst)
     for src in (TOP/'evidence').glob('*.json'): copy(src,out/'evidence'/src.name)
     # Data is a new generic APFS seed from Apple's original OS, not an installation dump.
@@ -98,4 +135,4 @@ def root():
         'geometry_status':'PROPOSED_NOT_LIVE_VERIFIED','hardware_tested':False,'files':file_manifest(out)})
     print('Complete root and boot handoff available as TWO named artifacts; neither is installation approval.')
 if __name__=='__main__':
-    {'boot':boot,'root':root}[sys.argv[1]]()
+    {'boot':boot,'root':root,'preserve-compiled':preserve_compiled}[sys.argv[1]]()

@@ -57,6 +57,7 @@ jobs:
           done
           python3 pipeline/ci/prepare.py
       - name: Complete official OS27 build with fresh 215 GiB logical Data
+        id: boot_build
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 pipeline/ci/package.py boot
@@ -67,6 +68,19 @@ jobs:
           path: handoff/
           include-hidden-files: true
           if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Preserve compiled inputs if packaging fails
+        if: failure() && steps.boot_build.outcome == 'failure'
+        run: python3 pipeline/ci/package.py preserve-compiled
+      - name: Upload recoverable compiled inputs
+        if: failure() && steps.boot_build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-provisional-compiled-inputs
+          path: compiled-components/
+          include-hidden-files: true
+          if-no-files-found: ignore
           retention-days: 3
           compression-level: 0
       - name: Build evidence

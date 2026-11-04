@@ -34,6 +34,19 @@ assert hashlib.sha256(corrected_mesa_patch).hexdigest()==mesa_after
 assert corrected_mesa_patch.replace(b"new file mode 100644\n",b"",1)==original_mesa_patch
 mesa_patch.write_bytes(corrected_mesa_patch)
 save(TOP/"evidence/mesa-patch-header-compatibility.json",dict(kind="Git added-file metadata",source_commit=PINS["UniXNU"],path=str(mesa_patch.relative_to(TOP/"UniXNU")),before_sha256=mesa_before,after_sha256=mesa_after,added_header="new file mode 100644",all_Mesa_hunks_unchanged=True))
+# Backport the author's v0 boot image verifier offset correction.
+bootimg_source = TOP / "UniXNU/scripts/unixnu/bootimg.py"
+bootimg_original = bootimg_source.read_bytes()
+assert hashlib.sha256(bootimg_original).hexdigest() == "a50379c3dba5115ff574c8fcf451a60aff023cb51ef2c2c5cbd6a55e705c8595"
+bootimg_fixed = bootimg_original.replace(b"        start = 0\n", b"        start = page\n", 1)
+assert hashlib.sha256(bootimg_fixed).hexdigest() == "bf5d525c6f83dcabfba417b04aa0b29350c7659b71fcb12fe114717a3cc6815f"
+bootimg_source.write_bytes(bootimg_fixed)
+save(TOP / "evidence/bootimg-offset-backport.json", dict(
+    upstream_commit="33bcc1d8225fd095b5093433dd8def4d07df8463",
+    path="scripts/unixnu/bootimg.py",
+    before_sha256="a50379c3dba5115ff574c8fcf451a60aff023cb51ef2c2c5cbd6a55e705c8595",
+    after_sha256="bf5d525c6f83dcabfba417b04aa0b29350c7659b71fcb12fe114717a3cc6815f",
+))
 board=tomllib.loads((TOP/'device/board.toml').read_text())
 assert board['userdata']==dict(first_lba=173859584,last_lba=257745663,lba_bytes=4096,partition_name='unixnu')
 assert board['payload']['runtime']['data_gib']==215
