@@ -1,5 +1,5 @@
-"""Verify frozen public checkouts and apply the three reviewed storage-only patches."""
-import json, os, platform, shutil, subprocess, sys, tomllib
+"""Verify frozen public checkouts and apply reviewed storage and patch-header adaptations."""
+import hashlib, json, os, platform, shutil, subprocess, sys, tomllib
 from common import *
 manifest=json.loads((HERE/'storage/manifest.json').read_text())
 repos={'UniXNU':TOP/'UniXNU','UniXNU-sheng':TOP/'device','ShengUfs':TOP/'device/drivers/ShengUfs'}
@@ -21,6 +21,19 @@ for change in manifest['changes']:
     run('git','apply','--check',patch,cwd=repo)
     run('git','apply',patch,cwd=repo)
     assert digest(path)==change['after_sha256']
+# Declare the original added-file mode; no Mesa hunk or GPU code changes.
+mesa_patch=TOP/"UniXNU/patches/mesa/turnip-frame-diagnostics.patch"
+mesa_before="5eb8dda6e381f10fa48b62a9a497fb74a8b08c7999dea5468585c9848b2af966"
+mesa_after="cd15bbb8f932d564a99300e63d3d6c5a6a714b311596e80619092c5d3fa5e25a"
+assert digest(mesa_patch)==mesa_before,"unexpected original Mesa patch"
+original_mesa_patch=mesa_patch.read_bytes()
+mesa_anchor=b'diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h\n'
+assert original_mesa_patch.startswith(mesa_anchor+b"--- /dev/null\n") and original_mesa_patch.count(mesa_anchor)==1
+corrected_mesa_patch=original_mesa_patch.replace(mesa_anchor,mesa_anchor+b"new file mode 100644\n",1)
+assert hashlib.sha256(corrected_mesa_patch).hexdigest()==mesa_after
+assert corrected_mesa_patch.replace(b"new file mode 100644\n",b"",1)==original_mesa_patch
+mesa_patch.write_bytes(corrected_mesa_patch)
+save(TOP/"evidence/mesa-patch-header-compatibility.json",dict(kind="Git added-file metadata",source_commit=PINS["UniXNU"],path=str(mesa_patch.relative_to(TOP/"UniXNU")),before_sha256=mesa_before,after_sha256=mesa_after,added_header="new file mode 100644",all_Mesa_hunks_unchanged=True))
 board=tomllib.loads((TOP/'device/board.toml').read_text())
 assert board['userdata']==dict(first_lba=173859584,last_lba=257745663,lba_bytes=4096,partition_name='unixnu')
 assert board['payload']['runtime']['data_gib']==215

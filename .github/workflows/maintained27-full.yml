@@ -50,7 +50,7 @@ jobs:
             echo "/opt/homebrew/opt/bison/bin"
           } >> "$GITHUB_PATH"
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
-      - name: Check tools and prepare frozen storage-only adaptation
+      - name: Check tools and prepare reviewed build inputs
         run: |
           for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool mformat mcopy ipsw lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
             command -v "$t"
@@ -117,7 +117,7 @@ jobs:
             echo "/opt/homebrew/opt/bison/bin"
           } >> "$GITHUB_PATH"
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
-      - name: Check tools and prepare frozen storage-only adaptation
+      - name: Check tools and prepare reviewed build inputs
         run: |
           for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool mformat mcopy ipsw lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
             command -v "$t"
