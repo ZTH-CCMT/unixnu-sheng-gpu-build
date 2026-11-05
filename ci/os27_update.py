@@ -67,6 +67,8 @@ def prepare_files(top):
          b'vulkan/tu_frame_diagnostic.h\nnew file mode 100644\n--- /dev/null')])
     checked_replace(core / 'scripts/unixnu/bootimg.py', edits['bootimg'], [])
     checked_replace(core / 'scripts/build-boot-runtime.py', edits['runtime'], [])
+    from touch_frame_kind import apply_touch_patch
+    apply_touch_patch(top)
     board = tomllib.loads((device / 'board.toml').read_text())
     runtime = board['payload']['runtime']
     require(board['userdata'] == LOCK['live_target'], 'Incorrect dedicated storage geometry')
@@ -252,7 +254,8 @@ def build(seed):
                'synthetic_platform_seed': SYNTHETIC, 'personalization_required': True,
                'data_volume_uuid': DATA['uuid'], 'data_logical_bytes': DATA['logical_bytes'],
                'root_policies_sha256': LOCK['root_policies_sha256'],
-               'reused_root_sha256': LOCK['reused_root_sha256'], 'new_installation': False, 'files': files}
+               'reused_root_sha256': LOCK['reused_root_sha256'], 'new_installation': False,
+               'touch_frame_kind_fix': LOCK['touch_frame_kind_fix'], 'files': files}
     (stage / 'handoff.json').write_text(json.dumps(handoff, indent=2) + '\n')
     stage.rename(TOP / 'os27-update-handoff')
     print('Built and verified provisional boot-only update. Local personalization still required.')

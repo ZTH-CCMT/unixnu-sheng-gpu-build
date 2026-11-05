@@ -1,0 +1,18 @@
+THP frame-kind fix provenance
+
+Base: UniXNU-sheng 460179565a018c741b93e0b1efa07c55d4de497a;
+ShengNovatekTouch 3b44b1b7603eaadae942ea44ddc51bdcc48ad060.
+NvtProtocol source retains its Apache-2.0 SPDX identifier; TouchProbe.cpp and
+BootLog.c retain BSD-2-Clause-Patent identifiers. Existing source/NOTICE
+attributions remain in their original repositories.
+
+The frame kind and format boundary are independently described by
+ianchb/xiaomi-sheng-thp commit34046210932d654a4c0df0121ecc31c008f8148c,
+src/xiaomi_sheng_thp.cpp:1442-1491. That project is Apache-2.0 (copy included).
+This small patch implements packet classification and physical contact release;
+it does not import its stylus pipeline or replace the authored finger algorithm.
+
+Current device evidence locates repeated fixed points before HID. Their source
+is not yet proven to be stylus packets; the new counters are required for that
+hardware diagnosis. No private device data, raw touch logs or identity values
+are part of this public source patch or the workflow inputs.
