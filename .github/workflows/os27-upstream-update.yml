@@ -1,0 +1,79 @@
+name: OS27 upstream boot update - provisional
+# Reuses the generic seed from the previous public handoff.
+on:
+  push:
+    branches: [os27-upstream-update-20261105]
+    paths: ['.github/workflows/os27-upstream-update.yml', 'ci/os27_update.py', 'ci/os27-update-lock.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: os27-upstream-update-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  boot:
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: 8ddccb1e42d0063a2e613f897155c83994f60b11
+          path: UniXNU
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sheng
+          ref: 460179565a018c741b93e0b1efa07c55d4de497a
+          path: device
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/uefi-sheng
+          ref: 66421cb7bb5694843aec8de1ca3d1de4c20cca38
+          path: uefi-sheng
+          submodules: recursive
+          persist-credentials: false
+      - name: Author tool installation
+        run: |
+          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/lld/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+          } >> "$GITHUB_PATH"
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Retrieve original generic Data seed from previous build
+        uses: actions/download-artifact@v4
+        with:
+          name: os27-provisional-handoff
+          path: previous-handoff
+          repository: ZTH-CCMT/unixnu-sheng-gpu-build
+          run-id: 41767751331
+          github-token: ${{ github.token }}
+      - name: Build and verify boot update
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool mformat mcopy ipsw lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
+            command -v "$t"
+          done
+          python3 pipeline/ci/os27_update.py previous-handoff/data.dbr
+      - name: Save provisional boot update
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-upstream-update-handoff
+          path: os27-update-handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
