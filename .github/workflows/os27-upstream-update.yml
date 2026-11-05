@@ -56,7 +56,12 @@ jobs:
           python3 pipeline/ci/os27_update.py --stage-wifi
           test -d "$(xcrun --sdk iphoneos --show-sdk-path)"
           command -v codesign plutil hdiutil
-          bash device/drivers/Ath12kWifi/tools/fetch-sources.sh
+          # The locked paths are Gitignore-style patterns, including individual files.
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sparseCheckoutCone GIT_CONFIG_VALUE_0=false \
+            bash device/drivers/Ath12kWifi/tools/fetch-sources.sh
+          for source in linux freebsd; do
+            git -C "device/drivers/Ath12kWifi/deps/$source" sparse-checkout reapply --no-cone --no-sparse-index
+          done
           python3 device/scripts/build-wifi-userspace.py "$RUNNER_TEMP/os27-wifi-preflight" ios27
       - name: Retrieve original generic Data seed from previous build
         uses: actions/download-artifact@v4
