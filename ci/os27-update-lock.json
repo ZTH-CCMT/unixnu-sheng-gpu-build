@@ -92,30 +92,34 @@
     }
   },
   "touch_frame_kind_fix": {
-    "id": "finger-only-thp-stylus-classification-v1",
+    "id": "finger-only-thp-touch-lifecycle-v3",
     "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
     "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
-    "patch_sha256": "d713a7d27eab0967cf469347901154491324f2eef3ae58a98e52316643a6b07b",
+    "patch_sha256": "e5b77be888b47ee74ad43f9163cea3394b750f6246ac9168f643e569fe05a609",
     "files": {
-      "device/drivers/ShengNovatekTouch/NvtProtocol.h": {
-        "before": "c64465269b7a2ebf97b3c426505db91d77170e88a7cc8281e3916b166a0c9ed5",
-        "after": "49a2d6b1d021968825685c1f3e0b76dd366e020d53c815cb8b164e6043729553"
-      },
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
         "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
         "after": "e36aca444f6fe955325a6a0c43383c209ffd538a2ee1b98042e3ae9a6b0ff6b0"
+      },
+      "device/drivers/ShengNovatekTouch/NvtProtocol.h": {
+        "before": "c64465269b7a2ebf97b3c426505db91d77170e88a7cc8281e3916b166a0c9ed5",
+        "after": "49a2d6b1d021968825685c1f3e0b76dd366e020d53c815cb8b164e6043729553"
       },
       "device/drivers/ShengNovatekTouch/Test/nvt-protocol.c": {
         "before": "e337e690bd04834ed2a7052feda5f07e9efeec185466d654a91516a9880aa65b",
         "after": "fa515bb6008f7909c0ca118fdef0f87d3032fa2c02dc8552852ada9101d8c80a"
       },
-      "device/package/TouchProbe.cpp": {
-        "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
-        "after": "70db65107407584ff5fb60aab6656f8f5941825eac6c005764592e13652acb7e"
-      },
       "device/package/BootLog.c": {
         "before": "a539f2f5b37c01bbd19596416039aa3fa03d836eac7d2fcdf8eed08e58e263a4",
-        "after": "012121c017056e721eacb03d7953c1bb502810b94e766a50c1785f81737c10f3"
+        "after": "1f504ffb9dc5819aebbb9295d543171a9728f0e4e0751ec7a7fb39644b14f5d4"
+      },
+      "device/package/TouchLifecycle.h": {
+        "before": null,
+        "after": "62a6857894bc7ba14412addc37ea8af0cd1038180bcccb1adf219e688c2bcd0e"
+      },
+      "device/package/TouchProbe.cpp": {
+        "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
+        "after": "e7d8908ae1be22b6ab18e1d61b8fd2880312c11e438d3950e551393a6ef75531"
       }
     },
     "reference": {
@@ -123,8 +127,13 @@
       "commit": "34046210932d654a4c0df0121ecc31c008f8148c",
       "classification": "Full-frame metadata[257+0x38]==0x1d is a stylus packet, not an ordinary mutual touch matrix"
     },
-    "change": "Separate stylus packets before matrix/reference processing; release active physical finger contacts; preserve reference, ordinary coordinates and authored display selftest; persist packet-kind counters via log-input",
+    "change": "Keep stylus packets outside mutual matrices while preserving pending/active finger tracking; release publication only after100ms without any accepted frame; bounded scripted guard; unchanged ordinary coordinates, thresholds, reference and authored display selftest",
     "hardware_cause_not_yet_confirmed": true,
-    "runtime_log_input_added_locally_after_personalization": true
+    "runtime_log_input_added_locally_after_personalization": true,
+    "policy_version": 3,
+    "whole_stream_timeout_us": 100000,
+    "script_guard_retry_ms": 100,
+    "valid_stylus_preserves_tracking": true,
+    "timer_wake_spi": false
   }
 }

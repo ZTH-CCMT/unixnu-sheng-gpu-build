@@ -1,18 +1,18 @@
-THP frame-kind fix provenance
+THP frame-kind and publication-lifecycle v3 provenance
 
-Base: UniXNU-sheng 460179565a018c741b93e0b1efa07c55d4de497a;
-ShengNovatekTouch 3b44b1b7603eaadae942ea44ddc51bdcc48ad060.
-NvtProtocol source retains its Apache-2.0 SPDX identifier; TouchProbe.cpp and
-BootLog.c retain BSD-2-Clause-Patent identifiers. Existing source/NOTICE
-attributions remain in their original repositories.
+Base: UniXNU-sheng460179565a018c741b93e0b1efa07c55d4de497a;
+ShengNovatekTouch3b44b1b7603eaadae942ea44ddc51bdcc48ad060.
+NvtProtocol sources retain Apache-2.0 SPDX identifiers; TouchProbe.cpp,
+TouchLifecycle.h and BootLog.c retain BSD-2-Clause-Patent identifiers.
+Original source/NOTICE attributions remain in their repositories.
 
-The frame kind and format boundary are independently described by
-ianchb/xiaomi-sheng-thp commit34046210932d654a4c0df0121ecc31c008f8148c,
-src/xiaomi_sheng_thp.cpp:1442-1491. That project is Apache-2.0 (copy included).
-This small patch implements packet classification and physical contact release;
-it does not import its stylus pipeline or replace the authored finger algorithm.
+Reference: ianchb/xiaomi-sheng-thp34046210932d654a4c0df0121ecc31c008f8148c,
+src/xiaomi_sheng_thp.cpp1442-1491 and1527-1537; source is Apache-2.0
+(copy included). Packet classification is retained; a pen packet is not a
+finger-up. A100ms whole-valid-stream outage releases output once without
+resetting tracker, calibration or reference. Ordinary matrix processing,
+coordinates, confirmation thresholds and filters remain unchanged. This does
+not import the separate stylus/assembler pipeline or claim hardware success.
 
-Current device evidence locates repeated fixed points before HID. Their source
-is not yet proven to be stylus packets; the new counters are required for that
-hardware diagnosis. No private device data, raw touch logs or identity values
-are part of this public source patch or the workflow inputs.
+This public patch and workflow contain only source and synthetic build inputs;
+no device identity, private data or raw touch logs are included.
