@@ -19,22 +19,8 @@
   },
   "data": {
     "seed_sha256": "e1bfa6971ef9fe6a27b53474c509cd518325459484230daf7f679642a04323b3",
-    "uuid": "4E810171-5084-4856-B4AE-5E9798138FD0",
-    "logical_bytes": 230854492160,
-    "previous_build_run": 41767751331,
-    "previous_artifact_id": 13295716567,
-    "previous_artifact_name": "os27-provisional-handoff",
-    "previous_artifact_expiry_utc": "2026-11-07T04:21:35Z"
+    "logical_bytes": 230854492160
   },
-  "prior_android_outer_dtb_sha256": "23e52d55bf77363bfd04998aa047213c568abd78a75f2d92c11b083c374fbdde",
-  "stock_android_build": "OS3.0.306.0.WNXCNXM",
-  "live_target": {
-    "partition_name": "unixnu",
-    "first_lba": 173859584,
-    "last_lba": 257745663,
-    "lba_bytes": 4096
-  },
-  "memory_bytes": 5100273664,
   "job_environment": {
     "com.apple.iconservices.iconservicesagent": {
       "FORCE_SOFTWARE_RENDERER": "0",
@@ -46,7 +32,7 @@
       "name": "board",
       "git_blob": "be4e71f79c3ea43046ef4d72a1da7cb0b2b71cbd",
       "before": "2d4c4a6d8a2d7f6f8d5c22071029b84a9aa8a13aebd04d893e03aae45810a619",
-      "after": "e967f821b2992ca543157784ca0a2f03d27b66cd127eb42baef97973ea47e38e"
+      "after": "2d4c4a6d8a2d7f6f8d5c22071029b84a9aa8a13aebd04d893e03aae45810a619"
     },
     "ufs": {
       "name": "ufs",
@@ -73,8 +59,6 @@
       "after": "e1ac08c3e3685fd82f8bf19b2be851530f44b1be69c4e3c4959d8ec2c301626a"
     }
   },
-  "cloud_identity": "synthetic only; do not boot or flash the provisional artifact",
-  "local_gate": "Use verified signed addon and its trust bundle as a pair, original Data seed, real identity only locally, and exact CN306 outer DTB. Repack and verify separately before hardware use.",
   "wifi_firmware": {
     "raw_base": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20261019",
     "manifest_sha256": "f474f2a5a157bc59c804029532231a9a1cee16725018d37212972f11a0868570",
@@ -95,7 +79,7 @@
     "id": "finger-only-thp-touch-lifecycle-v3",
     "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
     "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
-    "patch_sha256": "e5b77be888b47ee74ad43f9163cea3394b750f6246ac9168f643e569fe05a609",
+    "patch_sha256": "608fd6c7c98d47c7622e70795d4e190e02a633b8a8fc35c83073bd2d60955f3d",
     "files": {
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
         "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
@@ -111,7 +95,7 @@
       },
       "device/package/BootLog.c": {
         "before": "a539f2f5b37c01bbd19596416039aa3fa03d836eac7d2fcdf8eed08e58e263a4",
-        "after": "1f504ffb9dc5819aebbb9295d543171a9728f0e4e0751ec7a7fb39644b14f5d4"
+        "after": "92742f77056694afe2dc80584b17749355107acd3ceec6b7c65af1000af27f78"
       },
       "device/package/TouchLifecycle.h": {
         "before": null,
@@ -119,7 +103,19 @@
       },
       "device/package/TouchProbe.cpp": {
         "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
-        "after": "e7d8908ae1be22b6ab18e1d61b8fd2880312c11e438d3950e551393a6ef75531"
+        "after": "beee9e863c67a79ac29b64095ab43ce4df6fbb4efee65c058c6e20c83d334a6e"
+      },
+      "device/package/TouchRawEvidence.h": {
+        "before": null,
+        "after": "9a2ab3767f19e853d83405c71058f3ffdc75397de53e440f06fb7d7f214af76a"
+      },
+      "device/package/TouchEvidenceWire.h": {
+        "before": null,
+        "after": "7f4ed4cc276417b61428d4131d85c3008f61362f7e7168c0b8f8362a9fd66a71"
+      },
+      "device/package/TouchEvidenceSerialize.h": {
+        "before": null,
+        "after": "a4f012f06672e5a343e40e0ddc7fd666287dc99a455d1e9a7d5d5ef9ce804a7f"
       }
     },
     "reference": {
@@ -127,13 +123,27 @@
       "commit": "34046210932d654a4c0df0121ecc31c008f8148c",
       "classification": "Full-frame metadata[257+0x38]==0x1d is a stylus packet, not an ordinary mutual touch matrix"
     },
-    "change": "Keep stylus packets outside mutual matrices while preserving pending/active finger tracking; release publication only after100ms without any accepted frame; bounded scripted guard; unchanged ordinary coordinates, thresholds, reference and authored display selftest",
+    "change": "Keep stylus packets outside mutual matrices while preserving pending/active finger tracking; release publication only after100ms without any accepted frame; bounded scripted guard; unchanged ordinary coordinates, thresholds, reference and authored display selftest; diagnostic-only bounded raw/reference/slot capture with existing text-log export; not a touch fix",
     "hardware_cause_not_yet_confirmed": true,
     "runtime_log_input_added_locally_after_personalization": true,
     "policy_version": 3,
     "whole_stream_timeout_us": 100000,
     "script_guard_retry_ms": 100,
     "valid_stylus_preserves_tracking": true,
-    "timer_wake_spi": false
+    "timer_wake_spi": false,
+    "diagnostic_evidence": {
+      "id": "touch-raw-evidence-v1",
+      "diagnostic_only": true,
+      "not_a_fix": true,
+      "algorithm_base_patch_sha256": "e5b77be888b47ee74ad43f9163cea3394b750f6246ac9168f643e569fe05a609",
+      "default_disabled": true,
+      "new_hardware_transactions": false,
+      "changes_root_or_data": false,
+      "samples": 4,
+      "metadata_capacity": 512,
+      "window_after_first_positive_M_us": 2000000,
+      "export": "Bounded repeated text chunks in existing log slots; no export-region or UFS-frequency change",
+      "uploaded_inputs": "Source and synthetic generic identity only; no real UID, logs or captured samples"
+    }
   }
 }

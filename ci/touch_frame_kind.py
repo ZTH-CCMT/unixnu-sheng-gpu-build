@@ -1,4 +1,4 @@
-"""Apply the six-file hash-locked touch lifecycle v3 patch; run small host preflights."""
+"""Apply the nine-file diagnostic capture patch on unchanged v3 policy; host-only preflights."""
 import hashlib
 import json
 import os
@@ -10,12 +10,13 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 LOCK = json.loads((HERE / "os27-update-lock.json").read_text())
-HEADER = "device/package/TouchLifecycle.h"
+NEW_HEADERS = {"device/package/TouchLifecycle.h", "device/package/TouchRawEvidence.h",
+               "device/package/TouchEvidenceWire.h", "device/package/TouchEvidenceSerialize.h"}
 FILES = {
     "device/drivers/ShengNovatekTouch/NvtProtocol.h",
     "device/drivers/ShengNovatekTouch/NvtProtocol.c",
     "device/drivers/ShengNovatekTouch/Test/nvt-protocol.c",
-    "device/package/TouchProbe.cpp", "device/package/BootLog.c", HEADER,
+    "device/package/TouchProbe.cpp", "device/package/BootLog.c", *NEW_HEADERS,
 }
 
 
@@ -33,17 +34,31 @@ def spec():
     require(set(value["files"]) == FILES, "Touch patch file allowlist differs")
     require(value["base_device_commit"] == LOCK["pins"]["device"], "Touch patch base device differs")
     require(value["base_novatek_commit"] == LOCK["components"]["device/drivers/ShengNovatekTouch"], "Touch component base differs")
-    require({name for name, item in value["files"].items() if item["before"] is None} == {HEADER},
-            "Only the new lifecycle header may have no original")
+    require({name for name, item in value["files"].items() if item["before"] is None} == NEW_HEADERS,
+            "Only the four new package headers may have no original")
     require(value["whole_stream_timeout_us"] == 100000 and value["script_guard_retry_ms"] == 100
             and value["valid_stylus_preserves_tracking"] is True and value["timer_wake_spi"] is False,
             "Lifecycle policy parameters differ")
+    diagnostic = value.get("diagnostic_evidence", {})
+    require(diagnostic.get("id") == "touch-raw-evidence-v1"
+            and diagnostic.get("diagnostic_only") is True
+            and diagnostic.get("not_a_fix") is True
+            and diagnostic.get("algorithm_base_patch_sha256") ==
+                "e5b77be888b47ee74ad43f9163cea3394b750f6246ac9168f643e569fe05a609"
+            and diagnostic.get("default_disabled") is True
+            and diagnostic.get("new_hardware_transactions") is False
+            and diagnostic.get("changes_root_or_data") is False,
+            "Not the reviewed diagnostic-only raw evidence scope")
+    require(re.fullmatch(r"[0-9a-f]{64}", value.get("patch_sha256") or "") is not None
+            and all(re.fullmatch(r"[0-9a-f]{64}", item.get("after") or "") is not None
+                    for item in value["files"].values()),
+            "Raw evidence candidate is incomplete; freeze all nine reviewed files first")
     return value
 
 
 def read_patch():
     value = spec()
-    patch = (HERE / "author-to-v3.patch").read_bytes()
+    patch = (HERE / "author-to-raw-evidence.patch").read_bytes()
     require(0 < len(patch) <= 131072 and sha(patch) == value["patch_sha256"], "Touch patch hash or size differs")
     require(not any(word in patch for word in (b"GIT binary patch", b"deleted file mode", b"rename from", b"rename to", b"copy from", b"copy to", b"old mode")),
             "Unexpected non-text source change")
@@ -59,13 +74,13 @@ def read_patch():
         old = re.findall(rb"^--- (.+)$", section, re.M)
         new = re.findall(rb"^\+\+\+ (.+)$", section, re.M)
         require(new == [("b/" + name).encode()], "Unexpected target patch path")
-        if name == HEADER:
+        if name in NEW_HEADERS:
             require(old == [b"/dev/null"] and section.count(b"new file mode 100644\n") == 1,
-                    "Lifecycle header must be a new regular source file")
+                    "New diagnostic/lifecycle header must be a regular source file")
         else:
             require(old == [("a/" + name).encode()] and b"new file mode" not in section,
                     "Unexpected creation of existing source")
-    require(seen == FILES and patch.count(b"new file mode") == 1, "New-file allowlist differs")
+    require(seen == FILES and patch.count(b"new file mode") == len(NEW_HEADERS), "New-file allowlist differs")
     return patch
 
 
@@ -77,10 +92,10 @@ def apply_touch_patch(top):
         path = top / relative
         require(not path.is_symlink() and path.resolve().is_relative_to(top), "Unexpected linked touch source")
         if item["before"] is None:
-            require(not path.exists(), "New lifecycle header already exists")
+            require(not path.exists(), "New diagnostic/lifecycle header already exists")
         else:
             require(path.is_file() and sha(path.read_bytes()) == item["before"], "Unexpected original touch source: " + relative)
-    patch = HERE / "author-to-v3.patch"
+    patch = HERE / "author-to-raw-evidence.patch"
     subprocess.run(["git", "apply", "--check", str(patch)], cwd=top, check=True, capture_output=True)
     subprocess.run(["git", "apply", str(patch)], cwd=top, check=True, capture_output=True)
     for relative, item in value["files"].items():
@@ -134,10 +149,81 @@ int main() {
     subprocess.run([str(output)], check=True)
 
 
+def raw_evidence_test(top, output):
+    compiler = shutil.which(os.environ.get("CXX", "c++"))
+    require(compiler is not None, "C++ compiler missing for evidence header preflight")
+    source = Path(output).with_suffix(".cpp")
+    source.write_text(r"""#include "TouchRawEvidence.h"
+#include "TouchEvidenceWire.h"
+#include "TouchEvidenceSerialize.h"
+#include <cassert>
+#include <cstring>
+using namespace touch_raw_evidence;
+static Storage storage;
+static SlotState slots[Slots];
+static ContactState contact[Slots];
+static uint8_t raw[RawBytes],peek[PeekBytes],blob[TouchEvidenceWire::MaxBlob];
+static int16_t reference[Nodes];
+static char text[TouchEvidenceWire::RowCapacity];
+static Prepared frame(Collector &c,uint64_t now,uint16_t seq,uint8_t data,uint8_t published) {
+    const FrameInfo info={now,seq,4,data,published};
+    return c.prepare(raw,RawBytes,peek,PeekBytes,reference,Nodes,slots,Slots,true,info);
+}
+int main() {
+    Collector disabled;
+    assert(disabled.configure(false,nullptr,0));
+    disabled.guard(9999999);
+    assert(!disabled.frozenAcquire());
+    Collector c;
+    assert(c.configure(true,&storage,100));
+    reference[0]=-32768;reference[1]=32767;
+    slots[0].active=1;slots[0].tracking_id=1;slots[0].fx=INT64_C(0x123456789);
+    assert(frame(c,100,1,0x1d,0)==CapturedP);
+    assert(!c.after(0,contact,Slots,0));
+    contact[0].slot=0;contact[0].tracking_id=1;contact[0].x=100;contact[0].y=200;
+    assert(frame(c,200,2,3,0)==AwaitingM);reference[0]=123;
+    assert(c.after(1,contact,Slots,1));
+    assert(frame(c,300,3,3,1)==AwaitingM);assert(c.after(1,contact,Slots,1));
+    assert(frame(c,400,4,3,1)==AwaitingM);assert(c.after(0,contact,Slots,0));
+    assert(!c.frozenAcquire());c.guard(2000200);
+    const Frozen *f=c.frozenAcquire();
+    assert(f && f->valid_mask==15 && f->metadata_count==3 && f->freeze_reason==Deadline);
+    assert(f->samples[FirstP].m_result==MNotCalled);
+    assert(f->samples[FirstPositiveM].pre_slots[0].fx==INT64_C(0x123456789));
+    assert(f->samples[FirstPositiveM].reference[0]==-32768);
+    const size_t n=TouchEvidenceSerialize::serialize(*f,blob,sizeof(blob));
+    assert(n==TouchEvidenceSerialize::HeaderBytes+4*TouchEvidenceSerialize::SampleBytes+
+        3*TouchEvidenceSerialize::MetadataBytes);
+    assert(!std::memcmp(blob,"TEVRAW01",8));
+    assert(blob[8]==1 && blob[9]==0 && blob[10]==0 && blob[11]==0);
+    const uint32_t encoded=(uint32_t)blob[12]|((uint32_t)blob[13]<<8)|
+        ((uint32_t)blob[14]<<16)|((uint32_t)blob[15]<<24);
+    assert(encoded==n);
+    assert(TouchEvidenceSerialize::serialize(*f,blob,n-1)==0);
+    static const uint8_t vector[]={'1','2','3','4','5','6','7','8','9'};
+    assert(TouchEvidenceWire::crc32(vector,sizeof vector)==0xcbf43926u);
+    const uint32_t crc=TouchEvidenceWire::crc32(blob,n);
+    const size_t chunks=(n+TouchEvidenceWire::RawChunk-1)/TouchEvidenceWire::RawChunk;
+    for(size_t i=0;i<chunks;++i) {
+        const size_t bytes=TouchEvidenceWire::rows(text,sizeof text,blob,n,crc,(uint32_t)i,0x123);
+        assert(bytes>0 && bytes<sizeof text && std::strstr(text,"[touch evidence]") &&
+            std::strstr(text,"TEV1 off="));
+    }
+    const uint64_t observed=f->observed_frames;
+    assert(frame(c,2000300,5,3,0)==Ignored);c.guard(9999999);
+    assert(f->observed_frames==observed);
+}
+""")
+    subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+                    "-I", str(Path(top) / "device/package"), str(source), "-o", str(output)], check=True)
+    subprocess.run([str(output)], check=True)
+
+
 def preflight():
     top = Path(os.environ.get("GITHUB_WORKSPACE", Path.cwd())).resolve()
     value = spec()
-    with tempfile.TemporaryDirectory(prefix="touch-lifecycle-v3-preflight-", dir=top) as name:
+    with tempfile.TemporaryDirectory(prefix="touch-raw-evidence-preflight-", dir=top) as name:
         temp = Path(name)
         for relative, item in value["files"].items():
             if item["before"] is None: continue
@@ -148,7 +234,8 @@ def preflight():
         value = apply_touch_patch(temp)
         protocol_tests(temp, temp / "nvt-protocol-test")
         lifecycle_test(temp, temp / "touch-lifecycle-test")
-    print(json.dumps({"status": "TOUCH_LIFECYCLE_V3_PREFLIGHT_PASS", "patch_sha256": value["patch_sha256"], "files": len(FILES)}))
+        raw_evidence_test(temp, temp / "touch-evidence-test")
+    print(json.dumps({"status": "TOUCH_RAW_EVIDENCE_DIAGNOSTIC_PREFLIGHT_PASS", "patch_sha256": value["patch_sha256"], "files": len(FILES)}))
 
 
 if __name__ == "__main__":

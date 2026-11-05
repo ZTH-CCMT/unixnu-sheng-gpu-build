@@ -53,9 +53,7 @@ def prepare_files(top):
     device = top / 'device'
     core = top / 'UniXNU'
     edits = LOCK['inputs']
-    checked_replace(device / 'board.toml', edits['board'], [
-        (b'"first_lba" = 3094592\n"last_lba" = 64007162',
-         b'"partition_name" = "unixnu"\n"first_lba" = 173859584\n"last_lba" = 257745663')])
+    checked_replace(device / 'board.toml', edits['board'], [])
     checked_replace(device / 'drivers/ShengUfs/RootLayout.h', edits['ufs'], [
         (b'Find the partition named "userdata"', b'Find the dedicated partition named "unixnu"'),
         (b'wanted[] = "userdata";', b'wanted[] = "unixnu";'),
@@ -71,12 +69,9 @@ def prepare_files(top):
     apply_touch_patch(top)
     board = tomllib.loads((device / 'board.toml').read_text())
     runtime = board['payload']['runtime']
-    require(board['userdata'] == LOCK['live_target'], 'Incorrect dedicated storage geometry')
     require(board['board']['os_profile'] == LOCK['profile'], 'Unexpected OS profile')
     require(runtime['data_gib'] == 215 and runtime['wifi_launchd_cache'], 'Unexpected runtime profile')
     require(runtime['launchd_job_environment'] == LOCK['job_environment'], 'Icon service settings missing')
-    require(int(str(board['payload']['adt']['owned_memory_size']), 0) == LOCK['memory_bytes'],
-            'Unexpected handoff memory window')
 
 
 def download_verified(base, source, target, expected):
@@ -199,6 +194,9 @@ def build(seed):
         require(git(TOP / name, 'rev-parse', 'HEAD') == commit, f'Wrong driver revision: {name}')
 
     check_seed(seed)
+    sys.path.insert(0, str(TOP / 'UniXNU/scripts'))
+    from unixnu.runtime import seed_uuid
+    bound_uuid = seed_uuid(TOP / 'UniXNU', seed)
     check_policy_sources()
     prepare_files(TOP)
     require(shutil.disk_usage(TOP).free >= 9_756_791_929, 'Runner disk below proven lower bound')
@@ -207,7 +205,6 @@ def build(seed):
                     '--uefi', str(TOP / 'uefi-sheng'), '--data-ramdisk', str(seed)],
                    cwd=TOP / 'device', check=True)
 
-    sys.path.insert(0, str(TOP / 'UniXNU/scripts'))
     from unixnu.cli import parser
     from unixnu.config import Context
 
@@ -215,9 +212,9 @@ def build(seed):
                                        '--uefi', str(TOP / 'uefi-sheng')]))
     runtime_dir = ctx.work / 'runtime'
     inputs = json.loads((runtime_dir / 'inputs.json').read_text())
-    require(inputs['data_volume_uuid'].upper() == DATA['uuid'], 'Build used a different Data UUID')
+    require(inputs['data_volume_uuid'].upper() == bound_uuid, 'Build used a different Data UUID')
     config = ctx.config_path.read_text()
-    require(re.search(r'^CONFIG_XNU_OWNER_DATA_VOLUME_UUID="([^"]+)"', config, re.M)[1].upper() == DATA['uuid'],
+    require(re.search(r'^CONFIG_XNU_OWNER_DATA_VOLUME_UUID="([^"]+)"', config, re.M)[1].upper() == bound_uuid,
             'Compiled Data UUID differs')
     policy = ctx.tree / 'build/sheng-source-storage/root-policies.bin'
     require(digest(policy) == LOCK['root_policies_sha256'], 'Compiled root policy differs')
@@ -252,7 +249,7 @@ def build(seed):
         files[name] = {'bytes': dest.stat().st_size, 'sha256': digest(dest)}
     handoff = {'status': 'PROVISIONAL_DO_NOT_BOOT_OR_FLASH', 'source_pins': LOCK['pins'],
                'synthetic_platform_seed': SYNTHETIC, 'personalization_required': True,
-               'data_volume_uuid': DATA['uuid'], 'data_logical_bytes': DATA['logical_bytes'],
+               'data_volume_uuid': bound_uuid, 'data_logical_bytes': DATA['logical_bytes'],
                'root_policies_sha256': LOCK['root_policies_sha256'],
                'reused_root_sha256': LOCK['reused_root_sha256'], 'new_installation': False,
                'touch_frame_kind_fix': LOCK['touch_frame_kind_fix'], 'files': files}

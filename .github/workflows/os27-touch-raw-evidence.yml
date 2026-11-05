@@ -1,15 +1,15 @@
-name: OS27 touch lifecycle v3 - provisional
+name: OS27 raw touch evidence - diagnostic only
 # Reuses the generic seed from the previous public handoff.
 on:
   push:
-    branches: [os27-touch-lifecycle-v3-20261105]
-    paths: ['.github/workflows/os27-touch-lifecycle-v3.yml', 'ci/os27_update.py', 'ci/os27-update-lock.json', 'ci/touch_frame_kind.py', 'ci/author-to-v3.patch', 'ci/TOUCH-PATCH-NOTICE.txt', 'ci/licenses/Apache-2.0.txt']
+    branches: [os27-touch-raw-evidence-20261105]
+    paths: ['.github/workflows/os27-touch-raw-evidence.yml', 'ci/os27_update.py', 'ci/os27-update-lock.json', 'ci/touch_frame_kind.py', 'ci/author-to-raw-evidence.patch', 'ci/TOUCH-PATCH-NOTICE.txt', 'ci/licenses/Apache-2.0.txt']
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: os27-touch-lifecycle-v3-${{ github.ref }}
+  group: os27-touch-raw-evidence-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   boot:
@@ -51,7 +51,7 @@ jobs:
             echo "/opt/homebrew/opt/bison/bin"
           } >> "$GITHUB_PATH"
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
-      - name: Verify touch lifecycle v3 before the full build
+      - name: Verify diagnostic raw evidence headers before the full build
         run: python3 pipeline/ci/touch_frame_kind.py --preflight
       - name: Prepare and test locked Wi-Fi inputs
         run: |
@@ -85,7 +85,7 @@ jobs:
       - name: Save provisional boot update
         uses: actions/upload-artifact@v4
         with:
-          name: os27-touch-lifecycle-v3-handoff
+          name: os27-touch-raw-evidence-handoff
           path: os27-update-handoff/
           include-hidden-files: true
           if-no-files-found: error

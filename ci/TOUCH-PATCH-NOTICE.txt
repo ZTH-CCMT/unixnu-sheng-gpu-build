@@ -16,3 +16,9 @@ not import the separate stylus/assembler pipeline or claim hardware success.
 
 This public patch and workflow contain only source and synthetic build inputs;
 no device identity, private data or raw touch logs are included.
+
+Raw evidence v1 adds only default-off diagnostic capture/serialization/text export.
+The v3 touch policy and thresholds are unchanged. New package headers use
+BSD-2-Clause-Patent. It is not a hardware-qualified fix or an installation.
+No device identity, real reference/pre-slot snapshots, logs or raw frames
+are permitted among the published workflow inputs.
