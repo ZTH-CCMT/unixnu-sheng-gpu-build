@@ -9,6 +9,7 @@ import struct
 import subprocess
 import sys
 import tomllib
+import urllib.request
 import zlib
 from pathlib import Path
 
@@ -74,6 +75,33 @@ def prepare_files(top):
     require(runtime['launchd_job_environment'] == LOCK['job_environment'], 'Icon service settings missing')
     require(int(str(board['payload']['adt']['owned_memory_size']), 0) == LOCK['memory_bytes'],
             'Unexpected handoff memory window')
+
+
+def download_verified(base, source, target, expected):
+    if target.is_file():
+        require(target.stat().st_size == expected['bytes'] and digest(target) == expected['sha256'],
+                f'Existing Wi-Fi input differs from the lock: {target.name}')
+        return
+    with urllib.request.urlopen(f'{base}/{source}', timeout=45) as response:
+        data = response.read(expected['bytes'] + 1)
+    require(len(data) == expected['bytes'] and sha(data) == expected['sha256'],
+            f'Downloaded Wi-Fi input differs from the lock: {target.name}')
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+
+
+def stage_wifi():
+    spec = LOCK['wifi_firmware']
+    firmware = TOP / 'device/firmware/wcn7850'
+    manifest = firmware / 'manifest.json'
+    require(digest(manifest) == spec['manifest_sha256'], 'Unexpected WCN7850 firmware manifest')
+    files = json.loads(manifest.read_text())['files']
+    require(set(files) == {'amss.bin', 'm3.bin', 'board-2.bin'}, 'Unexpected WCN7850 firmware names')
+    for name, expected in files.items():
+        download_verified(spec['raw_base'], f'ath12k/WCN7850/hw2.0/{name}', firmware / name, expected)
+    for path, expected in spec['notices'].items():
+        download_verified(spec['raw_base'], expected['source'], TOP / 'wifi-firmware-licenses' / path, expected)
+    print('Verified three locked WCN7850 firmware binaries and their redistribution notices.', flush=True)
 
 
 def check_seed(seed):
@@ -210,6 +238,7 @@ def build(seed):
         'author-package.manifest.json': ctx.work / 'package.manifest.json',
         'wifi-launchd-cache.json': cache_report,
         **runtime_inputs,
+        **{path: TOP / 'wifi-firmware-licenses' / path for path in LOCK['wifi_firmware']['notices']},
     }
     stage = TOP / 'os27-update-handoff.partial'
     stage.mkdir()
@@ -230,4 +259,9 @@ def build(seed):
 
 
 if __name__ == '__main__':
-    build(Path(sys.argv[1]).resolve())
+    if sys.argv[1:] == ['--stage-wifi']:
+        stage_wifi()
+    elif len(sys.argv) == 2:
+        build(Path(sys.argv[1]).resolve())
+    else:
+        raise SystemExit('Usage: os27_update.py --stage-wifi | ORIGINAL_DATA_SEED')

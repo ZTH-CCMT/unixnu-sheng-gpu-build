@@ -74,5 +74,21 @@
     }
   },
   "cloud_identity": "synthetic only; do not boot or flash the provisional artifact",
-  "local_gate": "Use verified signed addon and its trust bundle as a pair, original Data seed, real identity only locally, and exact CN306 outer DTB. Repack and verify separately before hardware use."
+  "local_gate": "Use verified signed addon and its trust bundle as a pair, original Data seed, real identity only locally, and exact CN306 outer DTB. Repack and verify separately before hardware use.",
+  "wifi_firmware": {
+    "raw_base": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20261019",
+    "manifest_sha256": "f474f2a5a157bc59c804029532231a9a1cee16725018d37212972f11a0868570",
+    "notices": {
+      "LICENSES/LICENSE.QualcommAtheros_ath10k": {
+        "source": "LICENSES/LICENSE.QualcommAtheros_ath10k",
+        "bytes": 2713,
+        "sha256": "337a55102138d7baa143ee4a4c6c91693e0113fece35d380b2a12109e8c23b3f"
+      },
+      "LICENSES/WCN7850-Notice.txt": {
+        "source": "ath12k/WCN7850/hw2.0/Notice.txt",
+        "bytes": 142991,
+        "sha256": "515bf4c9d620a87458e4447fe01a0e9bc384d1c3e0037cc4c3d2037b1ff25525"
+      }
+    }
+  }
 }

@@ -51,6 +51,13 @@ jobs:
             echo "/opt/homebrew/opt/bison/bin"
           } >> "$GITHUB_PATH"
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Prepare and test locked Wi-Fi inputs
+        run: |
+          python3 pipeline/ci/os27_update.py --stage-wifi
+          test -d "$(xcrun --sdk iphoneos --show-sdk-path)"
+          command -v codesign plutil hdiutil
+          bash device/drivers/Ath12kWifi/tools/fetch-sources.sh
+          python3 device/scripts/build-wifi-userspace.py "$RUNNER_TEMP/os27-wifi-preflight" ios27
       - name: Retrieve original generic Data seed from previous build
         uses: actions/download-artifact@v4
         with:
