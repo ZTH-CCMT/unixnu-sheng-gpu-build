@@ -76,55 +76,256 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
      slot->fx+=((long)x*16-slot->fx)*alpha/65536;slot->fy+=((long)y*16-slot->fy)*alpha/65536;
      slot->rx=(int)((slot->fx+8)/16);slot->ry=(int)((slot->fy+8)/16);
  }
-@@ -101,12 +113,16 @@
+@@ -99,17 +111,130 @@
+     return reason;
+ }
  
- // The cost of giving a finger blob j (j >= nfound: no blob): the squared distance from where the finger is heading, the radius
- // squared for no blob, more than that for a blob out of reach or too weak to keep a finger.
+-// The cost of giving a finger blob j (j >= nfound: no blob): the squared distance from where the finger is heading, the radius
+-// squared for no blob, more than that for a blob out of reach or too weak to keep a finger.
 -static long track_cost(const struct nvt_slot *slot, const struct nvt_contact *found, int nfound, int j, int predict) {
-+static long track_cost(const struct nvt_touch_core *core, const struct nvt_slot *slot, const struct nvt_contact *found, int nfound, int j, int predict) {
++// Route A keeps the original prediction for legacy/pending/missed/weak paths.
++// The added workspace is12*40 bytes on arm64; projection is computed once per
++// active slot, not once for every Hungarian edge.
++struct track_projection {
++    long original_x, original_y, x, y;
++    int fallback, ambiguous;
++};
++
++static uint64_t floor_sqrt_u64(uint64_t value) {
++    uint64_t result=0,bit=UINT64_C(1)<<62;
++    while(bit>value)bit>>=2;
++    while(bit) {
++        if(value>=result+bit) {value-=result+bit;result=(result>>1)+bit;}
++        else result>>=1;
++        bit>>=2;
++    }
++    return result;
++}
++
++static long point_cost(int x,int y,long px,long py) {
++    const long dx=(long)x-px,dy=(long)y-py;
++    return dx*dx+dy*dy;
++}
++
++static int route_a_slot(const struct nvt_touch_core *core,const struct nvt_slot *slot,int predict) {
++    return core->timed_enabled && predict && slot->age>=2 && !slot->missed;
++}
++
++static void project_tracks(const struct nvt_touch_core *core,const struct nvt_contact *found,
++                           int nfound,int predict,struct track_projection *projection) {
++    const long r2=(long)TRACK_RADIUS*TRACK_RADIUS,j2=(long)REJOIN_RADIUS*REJOIN_RADIUS;
++    for(int s=0;s<NVT_SLOTS;++s) {
++        const struct nvt_slot *slot=&core->slots[s];
++        if(!slot->active)continue;
++        struct track_projection *q=&projection[s];q->fallback=-1;q->ambiguous=0;
++        const int steps=predict ? slot->missed+1 : 0;
++        uint64_t elapsed=core->now_us>=slot->last_observed_us ? core->now_us-slot->last_observed_us : 0;
++        if(elapsed>NVT_DROPOUT_MAX_US)elapsed=NVT_DROPOUT_MAX_US;
++        const uint64_t interval=slot->last_interval_us ? slot->last_interval_us : 8333;
++        long sx=core->timed_enabled ? (predict ? (long)((int64_t)slot->dx*(int64_t)elapsed/(int64_t)interval) : 0) : (long)slot->dx*steps;
++        long sy=core->timed_enabled ? (predict ? (long)((int64_t)slot->dy*(int64_t)elapsed/(int64_t)interval) : 0) : (long)slot->dy*steps;
++        q->original_x=(long)slot->x+sx;q->original_y=(long)slot->y+sy;
++        if(route_a_slot(core,slot,predict)) {
++            // Valid raw deltas are bounded by30479/20319 units and elapsed by
++            //25000us, so even interval1 leaves norm2 below8.5e17 (signed64).
++            // Ceil norm plus signed truncation guarantees a Euclidean cap;
++            // clipping x/y independently would allow sqrt(2)*TRACK_RADIUS.
++            const uint64_t norm2=(uint64_t)(sx*sx)+(uint64_t)(sy*sy);
++            if(norm2>(uint64_t)r2) {
++                uint64_t norm=floor_sqrt_u64(norm2);if(norm*norm<norm2)++norm;
++                sx=(long)((int64_t)sx*TRACK_RADIUS/(int64_t)norm);
++                sy=(long)((int64_t)sy*TRACK_RADIUS/(int64_t)norm);
++            }
++        }
++        q->x=(long)slot->x+sx;q->y=(long)slot->y+sy;
++    }
++    for(int s=0;s<NVT_SLOTS;++s) {
++        const struct nvt_slot *slot=&core->slots[s];struct track_projection *q=&projection[s];
++        if(!slot->active || !route_a_slot(core,slot,predict))continue;
++        const uint64_t gap=core->now_us>=slot->last_observed_us ? core->now_us-slot->last_observed_us : 0;
++        // Reusing the existing25ms and24px constants here is a conservative
++        // experimental rescue eligibility, NOT a calibrated physical identity.
++        if(!gap || gap>NVT_DROPOUT_MAX_US)continue;
++        int local=-1;
++        for(int j=0;j<nfound;++j) {
++            if(found[j].peak<NVT_DOWN_THRESHOLD || point_cost(found[j].x,found[j].y,slot->x,slot->y)>j2)continue;
++            if(local>=0){local=-2;break;}local=j;
++        }
++        if(local==-2) {
++            // Two local strong alternatives are not one trustworthy fallback.
++            // If any needs rescue, do not let capped cost silently choose an ID.
++            for(int j=0;j<nfound;++j) {
++                if(found[j].peak>=NVT_DOWN_THRESHOLD && point_cost(found[j].x,found[j].y,slot->x,slot->y)<=j2 &&
++                   point_cost(found[j].x,found[j].y,q->original_x,q->original_y)>r2)q->ambiguous=1;
++            }
++            continue;
++        }
++        if(local<0)continue;
++        // Ordinary predictions which already support this candidate keep their
++        // original policy. Only an otherwise rejected strong local point asks
++        // for rescue; normal close multi-finger tracking does not enter here.
++        if(point_cost(found[local].x,found[local].y,q->original_x,q->original_y)<=r2)continue;
++        int ambiguous=0;
++        for(int j=0;j<nfound && !ambiguous;++j) {
++            if(j==local || found[j].peak<NVT_UP_THRESHOLD)continue;
++            const long px=found[j].peak<NVT_DOWN_THRESHOLD ? q->original_x : q->x;
++            const long py=found[j].peak<NVT_DOWN_THRESHOLD ? q->original_y : q->y;
++            if(point_cost(found[j].x,found[j].y,q->original_x,q->original_y)<=r2 ||
++               point_cost(found[j].x,found[j].y,px,py)<=r2)ambiguous=1;
++        }
++        for(int other=0;other<NVT_SLOTS && !ambiguous;++other) {
++            const struct nvt_slot *o=&core->slots[other];if(other==s || !o->active)continue;
++            const struct track_projection *p=&projection[other];
++            const long limit=o->missed ? j2 : r2;
++            if(point_cost(found[local].x,found[local].y,o->x,o->y)<=limit ||
++               point_cost(found[local].x,found[local].y,p->original_x,p->original_y)<=limit ||
++               point_cost(found[local].x,found[local].y,p->x,p->y)<=limit)ambiguous=1;
++        }
++        // Old-location + predicted-location alternatives cannot establish which
++        // physical finger owns the ID. Do not silently take either hypothesis;
++        // the existing miss/retirement path will require fresh confirmation.
++        if(ambiguous)q->ambiguous=1;
++        else q->fallback=local;
++    }
++}
++
++// One cost matrix still feeds the original global one-to-one Hungarian matcher.
++static long track_cost(const struct nvt_slot *slot,const struct nvt_contact *found,
++                       int nfound,int j,const struct track_projection *projection) {
      const long r2=(long)TRACK_RADIUS*TRACK_RADIUS;
-     if (j>=nfound) return r2;
-     if (found[j].peak<NVT_UP_THRESHOLD) return 4*r2;
-     const int steps = predict ? slot->missed + 1 : 0;
+-    if (j>=nfound) return r2;
+-    if (found[j].peak<NVT_UP_THRESHOLD) return 4*r2;
+-    const int steps = predict ? slot->missed + 1 : 0;
 -    const long px=slot->x+(long)slot->dx*steps,py=slot->y+(long)slot->dy*steps;
-+    uint64_t elapsed=core->now_us>=slot->last_observed_us ? core->now_us-slot->last_observed_us : 0;
-+    if(elapsed>NVT_DROPOUT_MAX_US)elapsed=NVT_DROPOUT_MAX_US;
-+    const uint64_t interval=slot->last_interval_us ? slot->last_interval_us : 8333;
-+    const long px=slot->x+(core->timed_enabled ? (predict ? (long)((int64_t)slot->dx*(int64_t)elapsed/(int64_t)interval) : 0) : (long)slot->dx*steps);
-+    const long py=slot->y+(core->timed_enabled ? (predict ? (long)((int64_t)slot->dy*(int64_t)elapsed/(int64_t)interval) : 0) : (long)slot->dy*steps);
-     const long dx=found[j].x-px,dy=found[j].y-py,d=dx*dx+dy*dy;
-     const long limit = slot->missed ? (long)REJOIN_RADIUS * REJOIN_RADIUS : r2;
-     return d <= limit ? d : 4*r2;
-@@ -133,7 +149,7 @@
+-    const long dx=found[j].x-px,dy=found[j].y-py,d=dx*dx+dy*dy;
+-    const long limit = slot->missed ? (long)REJOIN_RADIUS * REJOIN_RADIUS : r2;
+-    return d <= limit ? d : 4*r2;
++    if(j>=nfound)return r2;
++    if(found[j].peak<NVT_UP_THRESHOLD || projection->ambiguous)return 4*r2;
++    // Weak observations retain the uncapped original association and follow().
++    const long px=found[j].peak<NVT_DOWN_THRESHOLD ? projection->original_x : projection->x;
++    const long py=found[j].peak<NVT_DOWN_THRESHOLD ? projection->original_y : projection->y;
++    long d=point_cost(found[j].x,found[j].y,px,py);
++    if(projection->fallback==j) {
++        // Experimental24px-squared penalty keeps rescue below the dummy cost
++        // even at the24px boundary, without requiring predicted gate success.
++        const long rescue=(long)REJOIN_RADIUS*REJOIN_RADIUS+point_cost(found[j].x,found[j].y,slot->x,slot->y);
++        if(rescue<d)d=rescue;
++    }
++    const long limit=slot->missed ? (long)REJOIN_RADIUS*REJOIN_RADIUS : r2;
++    return d<=limit ? d : 4*r2;
+ }
+ 
+ // Least-cost assignment of the active fingers (rows) to the blobs plus one "no blob" column per finger (Hungarian method with
+@@ -122,6 +247,8 @@
+     // During a four/five-finger pinch the fingers can stop together. Extrapolating
+     // all their velocities through the stop can swap neighbours at the centre.
+     const int predict = n <= 3;
++    struct track_projection projection[NVT_SLOTS];
++    project_tracks(core,found,nfound,predict,projection);
+     const int m=nfound+n;
+     long u[NVT_SLOTS+1]={0},v[COLUMNS+1]={0},minv[COLUMNS+1];
+     int p[COLUMNS+1]={0},way[COLUMNS+1]={0};char used[COLUMNS+1];
+@@ -133,7 +260,7 @@
              const int i0=p[j0];long delta=__LONG_MAX__;int j1=0;
              for (int j=1;j<=m;++j) {
                  if (used[j]) continue;
 -                const long cur=track_cost(&core->slots[rows[i0]],found,nfound,j-1,predict)-u[i0]-v[j];
-+                const long cur=track_cost(core,&core->slots[rows[i0]],found,nfound,j-1,predict)-u[i0]-v[j];
++                const long cur=track_cost(&core->slots[rows[i0]],found,nfound,j-1,&projection[rows[i0]])-u[i0]-v[j];
                  if (cur<minv[j]) {minv[j]=cur;way[j]=j0;}
                  if (minv[j]<delta) {delta=minv[j];j1=j;}
              }
-@@ -149,7 +165,7 @@
+@@ -149,7 +276,7 @@
      for (int j=1;j<=nfound;++j) {
          if (!p[j]) continue;
          const int s=rows[p[j]];
 -        if (track_cost(&core->slots[s],found,nfound,j-1,predict)<=r2) match[s]=j-1;
-+        if (track_cost(core,&core->slots[s],found,nfound,j-1,predict)<=r2) match[s]=j-1;
++        if (track_cost(&core->slots[s],found,nfound,j-1,&projection[s])<=r2) match[s]=j-1;
      }
  }
  
-@@ -172,8 +188,8 @@
+@@ -172,8 +299,36 @@
  
  static int delta_at(const int16_t *m, const int16_t *ref, int index) {return (int)m[index]-(int)ref[index];}
  
 -int nvt_touch_process(struct nvt_touch_core *core, const int16_t *matrix, unsigned frame_type,
 -                      struct nvt_contact *out, int max) {
++// Route C: an intentionally strict, uncalibrated single-observation start.
++// Existing amplitude, palm and two-observation paths are unchanged. The input
++// has already passed the ordinary-M production classifier; a strong value in a
++// special-P packet never reaches this gate. One isolated high node is not enough.
++static int fast_start_candidate(const struct nvt_touch_core *core,
++                                const struct nvt_contact *found, int nfound,
++                                int blob_label, int npeaks, int npalms,
++                                int overflow, int had_active) {
++    if (!core->timed_enabled || had_active || nfound != 1 || npeaks != 1 ||
++        npalms || overflow || blob_label < 0 ||
++        found[0].peak < 2 * NVT_DOWN_THRESHOLD) return 0;
++    int low_row=NVT_ROWS, high_row=-1, low_col=NVT_COLUMNS, high_col=-1, support=0;
++    for (int node=0;node<NVT_NODES;++node) {
++        if (core->label[node] != blob_label || core->delta[node] < NVT_UP_THRESHOLD) continue;
++        const int row=node/NVT_COLUMNS, col=node%NVT_COLUMNS;
++        if (row<low_row)low_row=row;if(row>high_row)high_row=row;
++        if (col<low_col)low_col=col;if(col>high_col)high_col=col;
++        ++support;
++    }
++    const int rows=high_row-low_row+1, cols=high_col-low_col+1;
++    const int span=2*NVT_MERGE_SPAN+1;
++    // At least three strong nodes spanning both axes, bounded by the existing
++    // merge-neighbourhood span, with >=50% support occupancy in their rectangle.
++    // These are experiment eligibility choices, not learned hardware constants.
++    return support>=3 && rows>=2 && cols>=2 && rows<=span && cols<=span &&
++           support*2>=rows*cols;
++}
++
 +static int process_matrix(struct nvt_touch_core *core, const int16_t *matrix, unsigned frame_type,
 +                          struct nvt_contact *out, int max) {
      if (frame_type != 2 && frame_type != 4) return 0;
      if (frame_type == 2 && !core->have_reference) {
          memcpy(core->reference, matrix, sizeof(core->reference));
-@@ -328,16 +344,33 @@
+@@ -244,9 +399,12 @@
+     // node whenever the ridge moves; a peak with a stronger one within NVT_MERGE_SPAN nodes is folded into it.
+     struct nvt_contact found[MAX_PEAKS];
+     int match[NVT_SLOTS], reserved[MAX_PEAKS] = {0};
+-    int established = 0;
+-    for (int s = 0; s < NVT_SLOTS; ++s)
+-        if (core->slots[s].active && core->slots[s].age >= 2) ++established;
++    int established = 0, had_active = 0;
++    for (int s = 0; s < NVT_SLOTS; ++s) {
++        if (!core->slots[s].active) continue;
++        had_active = 1;
++        if (core->slots[s].age >= 2) ++established;
++    }
+     if (established >= 2 && npeaks >= 2) {
+         // Give established fingers a chance to keep separate maxima before merging
+         // a ridge. The final assignment below uses the weighted blob centroids.
+@@ -295,7 +453,7 @@
+         b->sum_w+=w;b->sum_row+=(long)w*kRowMap[i/NVT_COLUMNS]*NVT_SUPER_RESOLUTION;
+         b->sum_col+=(long)w*kColumnMap[i%NVT_COLUMNS]*NVT_SUPER_RESOLUTION;++b->area;
+     }
+-    int nfound=0;
++    int nfound=0, single_blob_label=-1;
+     int palms[MAX_PEAKS][2];int npalms=0;
+     for (int p=0;p<npeaks;++p) {
+         struct blob *b=&blobs[p];
+@@ -309,12 +467,15 @@
+         y=nvt_touch_map_edge_axis(y,NVT_SHORT_AXIS_MAX,1);
+         if (b->area>=NVT_PALM_MIN_NODES) {palms[npalms][0]=x;palms[npalms][1]=y;++npalms;continue;}   // palm-sized, not reported
+         found[nfound].slot=-1;found[nfound].tracking_id=0;found[nfound].x=x;found[nfound].y=y;
+-        found[nfound].peak=b->peak;found[nfound].area=b->area;found[nfound].weight=(int)b->sum_w;++nfound;
++        found[nfound].peak=b->peak;found[nfound].area=b->area;found[nfound].weight=(int)b->sum_w;
++        single_blob_label=p;++nfound;
+     }
+     // Track: the assignment of blobs (above the up threshold, within TRACK_RADIUS of each finger's predicted position) to fingers with
+     // the least total squared distance; a finger may also take no blob, at the cost of the radius. Matching slot by slot let a finger
+     // take its neighbour's blob (int-275: 5 strokes ended "taken"), and so does taking the closest pair first when two fingers move
+     // together; measuring from the last position instead of the predicted one ended fast swipes (13 of 125 strokes ended "far").
++    const int fast_start=fast_start_candidate(core,found,nfound,single_blob_label,
++                                               npeaks,npalms,overflow,had_active);
+     int used_contact[MAX_PEAKS]={0};
+     assign_tracks(core,found,nfound,match);
+     for (int s=0;s<NVT_SLOTS;++s) if (match[s]>=0) used_contact[match[s]]=1;
+@@ -328,16 +489,33 @@
              // Keep a partial dropout, including a fading signal at the finger.
              // An otherwise quiet matrix with only distant noise is a release.
              ++slot->missed;
@@ -161,7 +362,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
          // HID decides edge origin from tip-down. Debounce for two samples, but
          // publish the first sample's position on that first visible report.
          if (slot->age == 2) {
-@@ -358,7 +391,15 @@
+@@ -358,7 +536,15 @@
          if (used_contact[c] || found[c].peak<NVT_DOWN_THRESHOLD) continue;
          for (int s=0;s<NVT_SLOTS;++s) {
              if (core->slots[s].active) continue;
@@ -170,7 +371,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
 +            if(!core->timed_enabled)core->slots[s].active=1;
 +            const int id=free_tracking_id(core);
 +            if(!id){++core->id_quarantine_drops;continue;}
-+            core->slots[s].active=1;core->slots[s].tracking_id=id;core->slots[s].age=1;core->slots[s].missed=0;
++            core->slots[s].active=1;core->slots[s].tracking_id=id;core->slots[s].age=fast_start ? 2 : 1;core->slots[s].missed=0;
 +            if(core->timed_enabled) {
 +                core->slots[s].born_us=core->now_us;core->slots[s].last_observed_us=core->now_us;
 +                core->slots[s].last_interval_us=8333;
@@ -178,7 +379,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
              core->slots[s].x=found[c].x;core->slots[s].y=found[c].y;
              core->slots[s].rx=found[c].x;core->slots[s].ry=found[c].y;
              core->slots[s].fx=(long)found[c].x*16;core->slots[s].fy=(long)found[c].y*16;core->slots[s].vx=core->slots[s].vy=0;
-@@ -379,3 +420,75 @@
+@@ -379,3 +565,75 @@
      }
      return count;
  }

@@ -1,0 +1,124 @@
+{
+  "schema": "unixnu.os27-update.v1",
+  "profile": "ipados-27.0.1-24A446",
+  "pins": {
+    "UniXNU": "8ddccb1e42d0063a2e613f897155c83994f60b11",
+    "device": "460179565a018c741b93e0b1efa07c55d4de497a",
+    "uefi-sheng": "66421cb7bb5694843aec8de1ca3d1de4c20cca38"
+  },
+  "components": {
+    "device/drivers/ShengUfs": "af14068c329f4d8693d20a3ed38a435ade04bb75",
+    "device/drivers/ShengNovatekTouch": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
+    "UniXNU/drivers/AdrenoMetal": "6416a76e0a287d85afbcddda21192388460e155c"
+  },
+  "reused_root_sha256": "981110dacccc9ee7fc6778b2b13a83473856665770aea929edf933b499677694",
+  "root_policies_sha256": "e0787c6c86441714f090642594c97dee5b8bfb472278823bcde1cfa9a8a3b46b",
+  "root_policy_git_blobs": {
+    "OS": "e9d363026c03d929d6214aa0008a5909e32ffdc3",
+    "SystemOS": "87d28dc9859ccbbb4e22b5a4a21e3c202e95bf9e"
+  },
+  "data": {
+    "seed_sha256": "e1bfa6971ef9fe6a27b53474c509cd518325459484230daf7f679642a04323b3",
+    "logical_bytes": 230854492160
+  },
+  "job_environment": {
+    "com.apple.iconservices.iconservicesagent": {
+      "FORCE_SOFTWARE_RENDERER": "0",
+      "CI_ENABLE_METAL_GPU": "0"
+    }
+  },
+  "inputs": {
+    "board": {
+      "name": "board",
+      "git_blob": "be4e71f79c3ea43046ef4d72a1da7cb0b2b71cbd",
+      "before": "2d4c4a6d8a2d7f6f8d5c22071029b84a9aa8a13aebd04d893e03aae45810a619",
+      "after": "2d4c4a6d8a2d7f6f8d5c22071029b84a9aa8a13aebd04d893e03aae45810a619"
+    },
+    "ufs": {
+      "name": "ufs",
+      "git_blob": "82851d629597231f6f6bedfe76f8be6c8b97c104",
+      "before": "a188e7886917d5b8e02f6e7dbab648f5b6ca798584557f1216f5abfcdde67ea9",
+      "after": "385ccd6f5b1f6f1477e1f54c79f19531103f85ecdc422e17e89958b04ca15a85"
+    },
+    "mesa": {
+      "name": "mesa",
+      "git_blob": "c2dd1facd1371d87b3024c2d48e74b50282cab47",
+      "before": "5eb8dda6e381f10fa48b62a9a497fb74a8b08c7999dea5468585c9848b2af966",
+      "after": "cd15bbb8f932d564a99300e63d3d6c5a6a714b311596e80619092c5d3fa5e25a"
+    },
+    "bootimg": {
+      "name": "bootimg",
+      "git_blob": "de568f8ab8110a665babe753f87ed782a5629887",
+      "before": "bf5d525c6f83dcabfba417b04aa0b29350c7659b71fcb12fe114717a3cc6815f",
+      "after": "bf5d525c6f83dcabfba417b04aa0b29350c7659b71fcb12fe114717a3cc6815f"
+    },
+    "runtime": {
+      "name": "runtime",
+      "git_blob": "5165fec4fe1e58675fbbb6476a82b60d449d434c",
+      "before": "e1ac08c3e3685fd82f8bf19b2be851530f44b1be69c4e3c4959d8ec2c301626a",
+      "after": "e1ac08c3e3685fd82f8bf19b2be851530f44b1be69c4e3c4959d8ec2c301626a"
+    }
+  },
+  "wifi_firmware": {
+    "raw_base": "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/20261019",
+    "manifest_sha256": "f474f2a5a157bc59c804029532231a9a1cee16725018d37212972f11a0868570",
+    "notices": {
+      "LICENSES/LICENSE.QualcommAtheros_ath10k": {
+        "source": "LICENSES/LICENSE.QualcommAtheros_ath10k",
+        "bytes": 2713,
+        "sha256": "337a55102138d7baa143ee4a4c6c91693e0113fece35d380b2a12109e8c23b3f"
+      },
+      "LICENSES/WCN7850-Notice.txt": {
+        "source": "ath12k/WCN7850/hw2.0/Notice.txt",
+        "bytes": 142991,
+        "sha256": "515bf4c9d620a87458e4447fe01a0e9bc384d1c3e0037cc4c3d2037b1ff25525"
+      }
+    }
+  },
+  "touch_frame_kind_fix": {
+    "id": "touch-three-routes-20261106-route-c",
+    "variant": "aggressive",
+    "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
+    "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
+    "patch_sha256": "286c40067d27f2bb4844edf2d1fcd6ab4dbbc3e96a6055f0f2cdaac7ed4f5ef1",
+    "files": {
+      "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
+        "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
+        "after": "e36aca444f6fe955325a6a0c43383c209ffd538a2ee1b98042e3ae9a6b0ff6b0"
+      },
+      "device/drivers/ShengNovatekTouch/NvtProtocol.h": {
+        "before": "c64465269b7a2ebf97b3c426505db91d77170e88a7cc8281e3916b166a0c9ed5",
+        "after": "49a2d6b1d021968825685c1f3e0b76dd366e020d53c815cb8b164e6043729553"
+      },
+      "device/drivers/ShengNovatekTouch/NvtTouchCore.c": {
+        "before": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4",
+        "after": "76c37d37d0c29482f972f098a3b92e8ab51db6a872c9b69232b61954aa727b3e"
+      },
+      "device/drivers/ShengNovatekTouch/NvtTouchCore.h": {
+        "before": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e",
+        "after": "b36a45b3be6241dd164c3711020eeb85fef4072db4c4b34dd3de0a0faae5d19c"
+      },
+      "device/drivers/ShengNovatekTouch/Test/nvt-protocol.c": {
+        "before": "e337e690bd04834ed2a7052feda5f07e9efeec185466d654a91516a9880aa65b",
+        "after": "fa515bb6008f7909c0ca118fdef0f87d3032fa2c02dc8552852ada9101d8c80a"
+      },
+      "device/package/BootLog.c": {
+        "before": "a539f2f5b37c01bbd19596416039aa3fa03d836eac7d2fcdf8eed08e58e263a4",
+        "after": "e0d3b7ae7577e924ec56e393b2a97ef7d5ab8dbf44aa3d8822af46f748433f32"
+      },
+      "device/package/TouchEngine.h": {
+        "before": null,
+        "after": "cf8496b3da7ad2c584d862c13df7be8851d14b8375606edfe9bc555d4bdc3bea"
+      },
+      "device/package/TouchProbe.cpp": {
+        "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
+        "after": "db8755bc2ffd9998c7485c43bfbf03ba38f6e90a667d39549965b39ba8d201e2"
+      }
+    },
+    "hardware_tested": false,
+    "diagnostic_only": false,
+    "not_a_proven_touch_fix": true,
+    "original_source_frozen": true,
+    "route": "route-c"
+  }
+}

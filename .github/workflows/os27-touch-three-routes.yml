@@ -1,16 +1,22 @@
-name: OS27 touch aggressive - separate candidate
+name: OS27 three independent touch repair routes
 on:
   push:
-    branches: [os27-touch-aggressive-20261106]
+    branches: [os27-touch-three-routes-20261106]
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: os27-touch-aggressive-${{ github.ref }}
+  group: os27-touch-three-routes-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   boot:
+    name: ${{ matrix.route }}
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        route: [route-a, route-b, route-c]
     runs-on: macos-26
     timeout-minutes: 240
     steps:
@@ -49,6 +55,8 @@ jobs:
             echo "/opt/homebrew/opt/bison/bin"
           } >> "$GITHUB_PATH"
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Select sealed isolated touch route
+        run: python3 pipeline/ci/select_route.py ${{ matrix.route }}
       - name: Validate exact source overlay and run touch contracts
         run: |
           python3 pipeline/ci/test_ci_support.py
@@ -72,31 +80,31 @@ jobs:
           repository: ZTH-CCMT/unixnu-sheng-gpu-build
           run-id: 41767751331
           github-token: ${{ github.token }}
-      - name: Build and verify aggressive boot candidate
+      - name: Build and verify ${{ matrix.route }} boot candidate
         id: build_candidate
         env:
           UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 pipeline/ci/os27_update.py previous-handoff/data.dbr
-      - name: Save isolated aggressive handoff
+      - name: Save isolated ${{ matrix.route }} handoff
         uses: actions/upload-artifact@v4
         with:
-          name: os27-touch-aggressive-20261106-handoff
+          name: os27-touch-${{ matrix.route }}-20261106-handoff
           path: os27-update-handoff/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
           compression-level: 0
-      - name: Quarantine failed aggressive build evidence
+      - name: Quarantine failed ${{ matrix.route }} build evidence
         if: failure() && steps.build_candidate.outcome == 'failure'
         env:
           UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
         run: python3 pipeline/ci/preserve_failed_build.py
-      - name: Preserve UNAPPROVED DO NOT BOOT aggressive quarantine
+      - name: Preserve UNAPPROVED DO NOT BOOT ${{ matrix.route }} quarantine
         if: always() && steps.build_candidate.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: os27-touch-aggressive-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine
+          name: os27-touch-${{ matrix.route }}-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine
           path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
           if-no-files-found: error
           retention-days: 3
@@ -105,7 +113,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: os27-touch-aggressive-20261106-host-results
+          name: os27-touch-${{ matrix.route }}-20261106-host-results
           path: pipeline/ci/host-test-results/
           if-no-files-found: ignore
           retention-days: 3

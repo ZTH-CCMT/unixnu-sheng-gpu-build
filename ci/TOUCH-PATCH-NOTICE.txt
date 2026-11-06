@@ -1,1 +1,0 @@
-Experimental touch-only overlay. Not hardware verified. Existing upstream source licenses apply; new code retains its SPDX notices. No sensor raw data or device identity included. Testing and aggressive candidates are separate.

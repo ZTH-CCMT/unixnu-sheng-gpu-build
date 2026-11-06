@@ -1,0 +1,63 @@
+{
+  "schema": "unixnu.touch-route.generic.v1",
+  "route": "route-b",
+  "status": "HOST_SOURCE_CANDIDATE_NOT_HARDWARE",
+  "public_files": {
+    "author-to-touch.patch": {
+      "bytes": 34102,
+      "sha256": "41f9462710d4cd74c3a3e11ddb19be7fa0b3648afcaa6abe80856591221b7f9b"
+    },
+    "os27-update-lock.json": {
+      "bytes": 5629,
+      "sha256": "abbd37d79ff25d82c1b353114deeb3d98bada07f3a34cf6a048e3b7fe9867b2b"
+    },
+    "tests/reference/baseline_adapter.c": {
+      "bytes": 334,
+      "sha256": "fd00d553c601d9e6e057dee131506708b3d1acdce8597c77effad2f115d0b884"
+    },
+    "tests/reference/LICENSE": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "tests/reference/NOTICE": {
+      "bytes": 633,
+      "sha256": "833994aaf73805b85b69968302b9c4d2fed37519c8f759e622f0fcd0f7ca988d"
+    },
+    "tests/reference/NvtTouchCore.c": {
+      "bytes": 20192,
+      "sha256": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4"
+    },
+    "tests/reference/NvtTouchCore.h": {
+      "bytes": 5946,
+      "sha256": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e"
+    },
+    "tests/reference/PROVENANCE.txt": {
+      "bytes": 190,
+      "sha256": "2f4cd70178c65b460ce5620758e56516efe4a4454bbb02697037167bdfe28eb6"
+    },
+    "tests/run_ci_tests.py": {
+      "bytes": 730,
+      "sha256": "4ef66ba6a214e6eca73a889331bb6d8d1f847d6c09c246b6db088e9035afd0a9"
+    },
+    "tests/run_host_tests.py": {
+      "bytes": 2805,
+      "sha256": "21347f5f71b6a369d140486a92059434ea10a84d722c3f6f2fd271ce8e3bc90a"
+    },
+    "tests/run_route_tests.py": {
+      "bytes": 2242,
+      "sha256": "25f51b4a1748f25de63fe2d33f1a623421ccf091f3ff4c72ab90d1e405f6791c"
+    },
+    "tests/test_measured_position.cpp": {
+      "bytes": 8452,
+      "sha256": "4aefd2da3a011036c5354f9c562165e4f1e2cf50d1f7c591814d8c1eb4a57fe9"
+    },
+    "tests/test_timed_touch.cpp": {
+      "bytes": 10017,
+      "sha256": "176507ae0dc2beaaf9bf0527322c57eba363ff8bef14a930da4816e5e4c49c78"
+    },
+    "TOUCH-PATCH-NOTICE.txt": {
+      "bytes": 144,
+      "sha256": "7051608e80219f80587bf78a45d2078bc8afc78874b19e5c0ac22a480dd7065f"
+    }
+  }
+}

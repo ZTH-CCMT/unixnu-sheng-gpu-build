@@ -76,11 +76,11 @@
     }
   },
   "touch_frame_kind_fix": {
-    "id": "touch-two-versions-20261106-aggressive",
+    "id": "touch-three-routes-20261106-route-b",
     "variant": "aggressive",
     "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
     "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
-    "patch_sha256": "422ee6eed85343f4c5b1fb8438140d0b6c279b94ec3512c14ddecd5981d8e80c",
+    "patch_sha256": "41f9462710d4cd74c3a3e11ddb19be7fa0b3648afcaa6abe80856591221b7f9b",
     "files": {
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
         "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
@@ -92,7 +92,7 @@
       },
       "device/drivers/ShengNovatekTouch/NvtTouchCore.c": {
         "before": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4",
-        "after": "e8c98197162bce012fcabf5b13ba87421c2b98a325e435590ecf44ece7cc206f"
+        "after": "d6c60194fb7b889cc365d423701cae76c1fb296c5f1c95f0a0b750b327c529da"
       },
       "device/drivers/ShengNovatekTouch/NvtTouchCore.h": {
         "before": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e",
@@ -118,6 +118,7 @@
     "hardware_tested": false,
     "diagnostic_only": false,
     "not_a_proven_touch_fix": true,
-    "original_source_frozen": true
+    "original_source_frozen": true,
+    "route": "route-b"
   }
 }

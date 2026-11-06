@@ -1,0 +1,87 @@
+{
+  "schema": "unixnu.touch-route.generic.v1",
+  "route": "route-a",
+  "status": "HOST_SOURCE_CANDIDATE_NOT_HARDWARE",
+  "public_files": {
+    "author-to-touch.patch": {
+      "bytes": 41182,
+      "sha256": "8cda68277fb256fe2ed6a5f63bda6ef2e0f564cac9b33a45fe1b37738b95f9aa"
+    },
+    "os27-update-lock.json": {
+      "bytes": 5629,
+      "sha256": "563aae6fde8d2fa1ae1a8138e8050ab63a232720f9f8882383152ab5177f9e54"
+    },
+    "tests/parent_ag_probe.c": {
+      "bytes": 275,
+      "sha256": "abf589a39bd19e1a22fb6199bbb9688ed3e35cacee5db81cfa301b1875c4a94f"
+    },
+    "tests/reference/baseline_adapter.c": {
+      "bytes": 334,
+      "sha256": "fd00d553c601d9e6e057dee131506708b3d1acdce8597c77effad2f115d0b884"
+    },
+    "tests/reference/LICENSE": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "tests/reference/NOTICE": {
+      "bytes": 633,
+      "sha256": "833994aaf73805b85b69968302b9c4d2fed37519c8f759e622f0fcd0f7ca988d"
+    },
+    "tests/reference/NvtTouchCore.c": {
+      "bytes": 20192,
+      "sha256": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4"
+    },
+    "tests/reference/NvtTouchCore.h": {
+      "bytes": 5946,
+      "sha256": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e"
+    },
+    "tests/reference/PROVENANCE.txt": {
+      "bytes": 190,
+      "sha256": "2f4cd70178c65b460ce5620758e56516efe4a4454bbb02697037167bdfe28eb6"
+    },
+    "tests/reference-aggressive/LICENSE": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "tests/reference-aggressive/NOTICE": {
+      "bytes": 633,
+      "sha256": "833994aaf73805b85b69968302b9c4d2fed37519c8f759e622f0fcd0f7ca988d"
+    },
+    "tests/reference-aggressive/NvtTouchCore.c": {
+      "bytes": 26466,
+      "sha256": "e8c98197162bce012fcabf5b13ba87421c2b98a325e435590ecf44ece7cc206f"
+    },
+    "tests/reference-aggressive/NvtTouchCore.h": {
+      "bytes": 7651,
+      "sha256": "b36a45b3be6241dd164c3711020eeb85fef4072db4c4b34dd3de0a0faae5d19c"
+    },
+    "tests/route_a_probe.c": {
+      "bytes": 719,
+      "sha256": "d150aae93ebb3a45bedc97b7df3d4da40cc964686c394ca3f6ff8dca89f53ba1"
+    },
+    "tests/run_ci_tests.py": {
+      "bytes": 730,
+      "sha256": "6e9727fa0f88852d461da86fbeb152ae474fd20f975f6fcd7fe85afc6512cbf7"
+    },
+    "tests/run_host_tests.py": {
+      "bytes": 2805,
+      "sha256": "21347f5f71b6a369d140486a92059434ea10a84d722c3f6f2fd271ce8e3bc90a"
+    },
+    "tests/run_route_tests.py": {
+      "bytes": 3315,
+      "sha256": "ef79ec9086ba00b13972af1b118f0b12f87dd66b6c780ec65ed6dc0a51f4c797"
+    },
+    "tests/test_route_a.cpp": {
+      "bytes": 10169,
+      "sha256": "dbf2b69b80c933bb979fb20a7025bdfa4430fda9df2c438f0493fcf17aab3ac1"
+    },
+    "tests/test_timed_touch.cpp": {
+      "bytes": 10017,
+      "sha256": "176507ae0dc2beaaf9bf0527322c57eba363ff8bef14a930da4816e5e4c49c78"
+    },
+    "TOUCH-PATCH-NOTICE.txt": {
+      "bytes": 144,
+      "sha256": "ddf745f4a0e0a1a1a1f94dab31cad06abc34961d84e82ffb71fa212a709644d0"
+    }
+  }
+}

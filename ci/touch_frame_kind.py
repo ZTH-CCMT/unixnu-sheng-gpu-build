@@ -76,7 +76,7 @@ def preflight(top):
         output=HERE/'host-test-results'
         output.mkdir(exist_ok=True)
         env={**os.environ,'TMPDIR':str(parent),'TMP':str(parent),'TEMP':str(parent),'UBSAN_OPTIONS':'halt_on_error=1:print_stacktrace=1','ASAN_OPTIONS':'halt_on_error=1'}
-        subprocess.run([sys.executable,str(temp/'tests/run_host_tests.py'),'--root',str(temp),'--out',str(output)],check=True,env=env)
+        subprocess.run([sys.executable,str(temp/'tests/run_ci_tests.py'),'--root',str(temp),'--out',str(output)],check=True,env=env)
     print('Synthetic production-code host contracts passed; no hardware success claimed.',flush=True)
 
 if __name__=='__main__':
