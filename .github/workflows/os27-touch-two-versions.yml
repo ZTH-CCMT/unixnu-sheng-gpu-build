@@ -50,7 +50,9 @@ jobs:
           } >> "$GITHUB_PATH"
           rustup toolchain install 1.98.0 --profile minimal --component rust-src
       - name: Validate exact source overlay and run touch contracts
-        run: python3 pipeline/ci/touch_frame_kind.py --preflight
+        run: |
+          python3 pipeline/ci/test_ci_support.py
+          python3 pipeline/ci/touch_frame_kind.py --preflight
       - name: Prepare unchanged locked Wi-Fi build inputs
         run: |
           python3 pipeline/ci/os27_update.py --stage-wifi
@@ -71,6 +73,7 @@ jobs:
           run-id: 41767751331
           github-token: ${{ github.token }}
       - name: Build and verify aggressive boot candidate
+        id: build_candidate
         env:
           UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
           GITHUB_TOKEN: ${{ github.token }}
@@ -81,6 +84,20 @@ jobs:
           name: os27-touch-aggressive-20261106-handoff
           path: os27-update-handoff/
           include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Quarantine failed aggressive build evidence
+        if: failure() && steps.build_candidate.outcome == 'failure'
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
+        run: python3 pipeline/ci/preserve_failed_build.py
+      - name: Preserve UNAPPROVED DO NOT BOOT aggressive quarantine
+        if: always() && steps.build_candidate.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-aggressive-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine
+          path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
           if-no-files-found: error
           retention-days: 3
           compression-level: 0
