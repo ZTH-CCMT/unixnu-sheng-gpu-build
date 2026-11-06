@@ -1,0 +1,114 @@
+name: OS27 touch V2 confidence-aware follow
+on:
+  push:
+    branches: [os27-touch-v2-20261106]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: os27-touch-v2-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  boot:
+    name: V2 / route-v2
+    runs-on: macos-26
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: 8ddccb1e42d0063a2e613f897155c83994f60b11
+          path: UniXNU
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sheng
+          ref: 460179565a018c741b93e0b1efa07c55d4de497a
+          path: device
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/uefi-sheng
+          ref: 66421cb7bb5694843aec8de1ca3d1de4c20cca38
+          path: uefi-sheng
+          submodules: recursive
+          persist-credentials: false
+      - name: Install author build tools
+        run: |
+          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/lld/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+          } >> "$GITHUB_PATH"
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Select sealed isolated touch route
+        run: python3 pipeline/ci/select_route.py route-v2
+      - name: Validate exact source overlay and run touch contracts
+        run: |
+          python3 pipeline/ci/test_ci_support.py
+          python3 pipeline/ci/touch_frame_kind.py --preflight
+      - name: Prepare unchanged locked Wi-Fi build inputs
+        run: |
+          python3 pipeline/ci/os27_update.py --stage-wifi
+          test -d "$(xcrun --sdk iphoneos --show-sdk-path)"
+          command -v codesign plutil hdiutil
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sparseCheckoutCone GIT_CONFIG_VALUE_0=false \
+            bash device/drivers/Ath12kWifi/tools/fetch-sources.sh
+          for source in linux freebsd; do
+            git -C "device/drivers/Ath12kWifi/deps/$source" sparse-checkout reapply --no-cone --no-sparse-index
+          done
+          python3 device/scripts/build-wifi-userspace.py "$RUNNER_TEMP/os27-wifi-preflight" ios27
+      - name: Reuse previous public generic Data seed
+        uses: actions/download-artifact@v4
+        with:
+          name: os27-provisional-handoff
+          path: previous-handoff
+          repository: ZTH-CCMT/unixnu-sheng-gpu-build
+          run-id: 41767751331
+          github-token: ${{ github.token }}
+      - name: Build and verify route-v2 boot candidate
+        id: build_candidate
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 pipeline/ci/os27_update.py previous-handoff/data.dbr
+      - name: Save isolated route-v2 handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v2-20261106-handoff
+          path: os27-update-handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Quarantine failed route-v2 build evidence
+        if: failure() && steps.build_candidate.outcome == 'failure'
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
+        run: python3 pipeline/ci/preserve_failed_build.py
+      - name: Preserve UNAPPROVED DO NOT BOOT route-v2 quarantine
+        if: always() && steps.build_candidate.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v2-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine
+          path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Preserve source and host-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v2-20261106-host-results
+          path: pipeline/ci/host-test-results/
+          if-no-files-found: ignore
+          retention-days: 3
