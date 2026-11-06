@@ -1,0 +1,282 @@
+name: OS27 touch V3 spatial tracking and HID ACK
+on:
+  push:
+    branches: [os27-touch-v3-20261106]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: os27-touch-v3-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  boot:
+    name: V3 / route-v3
+    runs-on: macos-26
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: pipeline
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: 8ddccb1e42d0063a2e613f897155c83994f60b11
+          path: UniXNU
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU-sheng
+          ref: 460179565a018c741b93e0b1efa07c55d4de497a
+          path: device
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/uefi-sheng
+          ref: 66421cb7bb5694843aec8de1ca3d1de4c20cca38
+          path: uefi-sheng
+          submodules: recursive
+          persist-credentials: false
+      - name: Install author build tools
+        run: |
+          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/lld/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+          } >> "$GITHUB_PATH"
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+      - name: Select sealed isolated touch route
+        run: python3 pipeline/ci/select_route.py route-v3
+      - name: Validate exact source overlay and run touch contracts
+        id: touch_preflight
+        run: |
+          python3 pipeline/ci/test_ci_support.py
+          python3 pipeline/ci/test_v3_header_allowlist.py
+          python3 pipeline/ci/test_delivery.py
+          python3 pipeline/ci/touch_frame_kind.py --preflight
+      - name: Prepare unchanged locked Wi-Fi build inputs
+        run: |
+          python3 pipeline/ci/os27_update.py --stage-wifi
+          test -d "$(xcrun --sdk iphoneos --show-sdk-path)"
+          command -v codesign plutil hdiutil
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sparseCheckoutCone GIT_CONFIG_VALUE_0=false \
+            bash device/drivers/Ath12kWifi/tools/fetch-sources.sh
+          for source in linux freebsd; do
+            git -C "device/drivers/Ath12kWifi/deps/$source" sparse-checkout reapply --no-cone --no-sparse-index
+          done
+          python3 device/scripts/build-wifi-userspace.py "$RUNNER_TEMP/os27-wifi-preflight" ios27
+      - name: Reuse previous public generic Data seed
+        uses: actions/download-artifact@v4
+        with:
+          name: os27-provisional-handoff
+          path: previous-handoff
+          repository: ZTH-CCMT/unixnu-sheng-gpu-build
+          run-id: 41767751331
+          github-token: ${{ github.token }}
+      - name: Build and verify route-v3 boot candidate
+        id: build_candidate
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 pipeline/ci/os27_update.py previous-handoff/data.dbr
+      - name: Inspect host evidence presence without ignoring missing files
+        id: delivery_inputs
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          present=any(p.is_file() for p in Path('pipeline/ci/host-test-results').rglob('*'))
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as stream:stream.write('host_present='+str(present).lower()+'\n')
+          PY
+      - name: Quarantine failed V3 build evidence
+        id: quarantine_prepare
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'failure' }}
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
+        run: python3 pipeline/ci/preserve_failed_build.py
+      - name: Deliver handoff immutable upload try 1
+        id: handoff_try1
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
+          path: os27-update-handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Wait 15 seconds before handoff upload try 2
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' && !((steps.handoff_try1.outcome == 'success' && steps.handoff_try1.outputs['artifact-id'] != '')) }}
+        run: sleep 15
+      - name: Deliver handoff immutable upload try 2
+        id: handoff_try2
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' && !((steps.handoff_try1.outcome == 'success' && steps.handoff_try1.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
+          path: os27-update-handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Wait 45 seconds before handoff upload try 3
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' && !((steps.handoff_try1.outcome == 'success' && steps.handoff_try1.outputs['artifact-id'] != '') || (steps.handoff_try2.outcome == 'success' && steps.handoff_try2.outputs['artifact-id'] != '')) }}
+        run: sleep 45
+      - name: Deliver handoff immutable upload try 3
+        id: handoff_try3
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' && !((steps.handoff_try1.outcome == 'success' && steps.handoff_try1.outputs['artifact-id'] != '') || (steps.handoff_try2.outcome == 'success' && steps.handoff_try2.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
+          path: os27-update-handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Wait 90 seconds before handoff upload try 4
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' && !((steps.handoff_try1.outcome == 'success' && steps.handoff_try1.outputs['artifact-id'] != '') || (steps.handoff_try2.outcome == 'success' && steps.handoff_try2.outputs['artifact-id'] != '') || (steps.handoff_try3.outcome == 'success' && steps.handoff_try3.outputs['artifact-id'] != '')) }}
+        run: sleep 90
+      - name: Deliver handoff immutable upload try 4
+        id: handoff_try4
+        if: ${{ !cancelled() && steps.build_candidate.outcome == 'success' && !((steps.handoff_try1.outcome == 'success' && steps.handoff_try1.outputs['artifact-id'] != '') || (steps.handoff_try2.outcome == 'success' && steps.handoff_try2.outputs['artifact-id'] != '') || (steps.handoff_try3.outcome == 'success' && steps.handoff_try3.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
+          path: os27-update-handoff/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Deliver host immutable upload try 1
+        id: host_try1
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
+          path: pipeline/ci/host-test-results/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 6
+      - name: Wait 15 seconds before host upload try 2
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') && !((steps.host_try1.outcome == 'success' && steps.host_try1.outputs['artifact-id'] != '')) }}
+        run: sleep 15
+      - name: Deliver host immutable upload try 2
+        id: host_try2
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') && !((steps.host_try1.outcome == 'success' && steps.host_try1.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
+          path: pipeline/ci/host-test-results/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 6
+      - name: Wait 45 seconds before host upload try 3
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') && !((steps.host_try1.outcome == 'success' && steps.host_try1.outputs['artifact-id'] != '') || (steps.host_try2.outcome == 'success' && steps.host_try2.outputs['artifact-id'] != '')) }}
+        run: sleep 45
+      - name: Deliver host immutable upload try 3
+        id: host_try3
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') && !((steps.host_try1.outcome == 'success' && steps.host_try1.outputs['artifact-id'] != '') || (steps.host_try2.outcome == 'success' && steps.host_try2.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
+          path: pipeline/ci/host-test-results/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 6
+      - name: Wait 90 seconds before host upload try 4
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') && !((steps.host_try1.outcome == 'success' && steps.host_try1.outputs['artifact-id'] != '') || (steps.host_try2.outcome == 'success' && steps.host_try2.outputs['artifact-id'] != '') || (steps.host_try3.outcome == 'success' && steps.host_try3.outputs['artifact-id'] != '')) }}
+        run: sleep 90
+      - name: Deliver host immutable upload try 4
+        id: host_try4
+        if: ${{ !cancelled() && (steps.touch_preflight.outcome == 'success' || steps.delivery_inputs.outputs.host_present == 'true') && !((steps.host_try1.outcome == 'success' && steps.host_try1.outputs['artifact-id'] != '') || (steps.host_try2.outcome == 'success' && steps.host_try2.outputs['artifact-id'] != '') || (steps.host_try3.outcome == 'success' && steps.host_try3.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
+          path: pipeline/ci/host-test-results/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 6
+      - name: Deliver quarantine immutable upload try 1
+        id: quarantine_try1
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
+          path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Wait 15 seconds before quarantine upload try 2
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') && !((steps.quarantine_try1.outcome == 'success' && steps.quarantine_try1.outputs['artifact-id'] != '')) }}
+        run: sleep 15
+      - name: Deliver quarantine immutable upload try 2
+        id: quarantine_try2
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') && !((steps.quarantine_try1.outcome == 'success' && steps.quarantine_try1.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
+          path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Wait 45 seconds before quarantine upload try 3
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') && !((steps.quarantine_try1.outcome == 'success' && steps.quarantine_try1.outputs['artifact-id'] != '') || (steps.quarantine_try2.outcome == 'success' && steps.quarantine_try2.outputs['artifact-id'] != '')) }}
+        run: sleep 45
+      - name: Deliver quarantine immutable upload try 3
+        id: quarantine_try3
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') && !((steps.quarantine_try1.outcome == 'success' && steps.quarantine_try1.outputs['artifact-id'] != '') || (steps.quarantine_try2.outcome == 'success' && steps.quarantine_try2.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
+          path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Wait 90 seconds before quarantine upload try 4
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') && !((steps.quarantine_try1.outcome == 'success' && steps.quarantine_try1.outputs['artifact-id'] != '') || (steps.quarantine_try2.outcome == 'success' && steps.quarantine_try2.outputs['artifact-id'] != '') || (steps.quarantine_try3.outcome == 'success' && steps.quarantine_try3.outputs['artifact-id'] != '')) }}
+        run: sleep 90
+      - name: Deliver quarantine immutable upload try 4
+        id: quarantine_try4
+        if: ${{ !cancelled() && (steps.build_candidate.outcome == 'failure' && steps.quarantine_prepare.outcome == 'success') && !((steps.quarantine_try1.outcome == 'success' && steps.quarantine_try1.outputs['artifact-id'] != '') || (steps.quarantine_try2.outcome == 'success' && steps.quarantine_try2.outputs['artifact-id'] != '') || (steps.quarantine_try3.outcome == 'success' && steps.quarantine_try3.outputs['artifact-id'] != '')) }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: os27-touch-route-v3-20261106-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
+          path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 3
+          compression-level: 0
+      - name: Require finalized artifact ACKs for all applicable delivery groups
+        if: ${{ !cancelled() }}
+        env:
+          DELIVERY_STEPS: ${{ toJSON(steps) }}
+        run: python3 pipeline/ci/verify_delivery.py

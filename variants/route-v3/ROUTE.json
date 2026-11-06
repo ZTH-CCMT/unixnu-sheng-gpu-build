@@ -1,0 +1,91 @@
+{
+  "schema": "unixnu.touch-route.generic.v1",
+  "route": "route-v3",
+  "display_version": "V3",
+  "status": "HOST_SOURCE_CANDIDATE_NOT_HARDWARE",
+  "production_core_hashes": {
+    "device/drivers/ShengHidInput/NativeHidInput.cpp": "d53f14c79c52cb6f01f96900a6bbeb3a48c63f881aa884ee01e66c67b03f2e89",
+    "device/drivers/ShengHidInput/NativeHidTouchPlan.h": "b11592c16e451d7e37c7e3cb8505503e2737659a3c27648a64ec1016f8b2fd07",
+    "device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h": "9b6d755a41819e1f1666a21da183b8e8ed4da9a0f075ca9315caf6f187524ed7",
+    "device/drivers/ShengNovatekTouch/NvtTouchCore.c": "88905d18ffc6e10d1d275ec969e58338d7c9e9a65b84a0eb3e21c01dfed03b08",
+    "device/drivers/ShengNovatekTouch/NvtTouchCore.h": "5512daf4af1b713c77c13dcb71a8152aa8ed05b2a01461fd8a730f901e5680c0"
+  },
+  "public_files": {
+    "author-to-touch.patch": {
+      "bytes": 66225,
+      "sha256": "4054e255b60087445b65ab8c350ebaf27a50813c6ea54ca18e1b99d1b92cac35"
+    },
+    "os27-update-lock.json": {
+      "bytes": 6846,
+      "sha256": "814ac386c193acfebeb42c0a074340020e0b6ee3dd6925a9f672b5aee0a34419"
+    },
+    "tests/hid/extracted_touchsend.cpp": {
+      "bytes": 15158,
+      "sha256": "dda2672f6a0dce9c65051c170ae9dd754fa48be9348333bf768c96b0fecfdde4"
+    },
+    "tests/hid/LICENSE": {
+      "bytes": 2681,
+      "sha256": "fc56b096347b83da4a300f97ad6182484941bbeff8becf91914b7fdc203d5a9f"
+    },
+    "tests/hid/pure_c_compile.c": {
+      "bytes": 193,
+      "sha256": "4fd85381da8c970b763b2f1f11d6ee51b302e60d483201b2d0728ec3644ad2d3"
+    },
+    "tests/hid/touchSend.baseline.cpp.txt": {
+      "bytes": 3247,
+      "sha256": "364d5744d3ee4145f349eddc5ad8cd37e744d15593239fb5d1487937eedfec7e"
+    },
+    "tests/independent_actual_v3.cpp": {
+      "bytes": 7424,
+      "sha256": "21a488e11b9354980e01e926e6d7371cd1f79862c9d1ea172e357f2567994040"
+    },
+    "tests/reference/baseline_adapter.c": {
+      "bytes": 334,
+      "sha256": "fd00d553c601d9e6e057dee131506708b3d1acdce8597c77effad2f115d0b884"
+    },
+    "tests/reference/LICENSE": {
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    "tests/reference/NOTICE": {
+      "bytes": 633,
+      "sha256": "833994aaf73805b85b69968302b9c4d2fed37519c8f759e622f0fcd0f7ca988d"
+    },
+    "tests/reference/NvtTouchCore.c": {
+      "bytes": 20192,
+      "sha256": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4"
+    },
+    "tests/reference/NvtTouchCore.h": {
+      "bytes": 5946,
+      "sha256": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e"
+    },
+    "tests/reference/PROVENANCE.txt": {
+      "bytes": 190,
+      "sha256": "2f4cd70178c65b460ce5620758e56516efe4a4454bbb02697037167bdfe28eb6"
+    },
+    "tests/run_v3_tests.py": {
+      "bytes": 9798,
+      "sha256": "f063a09fb34b07370590e29968f6867541f597441423d3d6da2f63e6240d2cdf"
+    },
+    "tests/shape/test_shape.c": {
+      "bytes": 4935,
+      "sha256": "f98b9871d69b75b66266f3afef642f4e026751baed1a71590eaf01f1baa75263"
+    },
+    "tests/TEST-COPY-PROVENANCE.json": {
+      "bytes": 5656,
+      "sha256": "40ccb24ffe8fab33b4018927f3da35277582b53d609dd55fa06b583604ab0370"
+    },
+    "tests/test_timed_touch.cpp": {
+      "bytes": 10017,
+      "sha256": "176507ae0dc2beaaf9bf0527322c57eba363ff8bef14a930da4816e5e4c49c78"
+    },
+    "tests/test_v3_core.cpp": {
+      "bytes": 5432,
+      "sha256": "40fe3e2cbce06644e096138907baa2875e89693e41722ed4e8c74aef2c3b7ed5"
+    },
+    "TOUCH-PATCH-NOTICE.txt": {
+      "bytes": 336,
+      "sha256": "34b80907bf66cdc7262922b6f30c212a82e561997c4e1f353178f02ed9f66825"
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "schema": "unixnu.v3.public-synthetic-test-provenance.v1",
+  "public_synthetic_only": true,
+  "files": {
+    "test_timed_touch.cpp": {
+      "source": "A-capped-prediction/tests/test_timed_touch.cpp",
+      "source_sha256": "176507ae0dc2beaaf9bf0527322c57eba363ff8bef14a930da4816e5e4c49c78",
+      "copied_sha256": "176507ae0dc2beaaf9bf0527322c57eba363ff8bef14a930da4816e5e4c49c78",
+      "body_assertions_byte_identical": true
+    },
+    "test_v3_core.cpp": {
+      "source": "V3/tests/test_v3_core.cpp",
+      "source_sha256": "40fe3e2cbce06644e096138907baa2875e89693e41722ed4e8c74aef2c3b7ed5",
+      "copied_sha256": "40fe3e2cbce06644e096138907baa2875e89693e41722ed4e8c74aef2c3b7ed5",
+      "body_assertions_byte_identical": true
+    },
+    "independent_actual_v3.cpp": {
+      "source": "V3/review-fixtures/independent_actual_v3.cpp",
+      "source_sha256": "21a488e11b9354980e01e926e6d7371cd1f79862c9d1ea172e357f2567994040",
+      "copied_sha256": "21a488e11b9354980e01e926e6d7371cd1f79862c9d1ea172e357f2567994040",
+      "body_assertions_byte_identical": true
+    },
+    "hid/extracted_touchsend.cpp": {
+      "source": "V3/prototype/hid-report/tests/extracted_touchsend.cpp",
+      "source_sha256": "dda2672f6a0dce9c65051c170ae9dd754fa48be9348333bf768c96b0fecfdde4",
+      "copied_sha256": "dda2672f6a0dce9c65051c170ae9dd754fa48be9348333bf768c96b0fecfdde4",
+      "body_assertions_byte_identical": true
+    },
+    "hid/pure_c_compile.c": {
+      "source": "V3/prototype/hid-report/tests/pure_c_compile.c",
+      "source_sha256": "4fd85381da8c970b763b2f1f11d6ee51b302e60d483201b2d0728ec3644ad2d3",
+      "copied_sha256": "4fd85381da8c970b763b2f1f11d6ee51b302e60d483201b2d0728ec3644ad2d3",
+      "body_assertions_byte_identical": true
+    },
+    "hid/touchSend.baseline.cpp.txt": {
+      "source": "V3/prototype/hid-report/touchSend.baseline.cpp.txt",
+      "source_sha256": "364d5744d3ee4145f349eddc5ad8cd37e744d15593239fb5d1487937eedfec7e",
+      "copied_sha256": "364d5744d3ee4145f349eddc5ad8cd37e744d15593239fb5d1487937eedfec7e",
+      "body_assertions_byte_identical": true
+    },
+    "hid/LICENSE": {
+      "source": "V3/prototype/hid-report/LICENSE",
+      "source_sha256": "fc56b096347b83da4a300f97ad6182484941bbeff8becf91914b7fdc203d5a9f",
+      "copied_sha256": "fc56b096347b83da4a300f97ad6182484941bbeff8becf91914b7fdc203d5a9f",
+      "body_assertions_byte_identical": true
+    },
+    "reference/baseline_adapter.c": {
+      "source": "A-capped-prediction/tests/reference/baseline_adapter.c",
+      "source_sha256": "fd00d553c601d9e6e057dee131506708b3d1acdce8597c77effad2f115d0b884",
+      "copied_sha256": "fd00d553c601d9e6e057dee131506708b3d1acdce8597c77effad2f115d0b884",
+      "body_assertions_byte_identical": true
+    },
+    "reference/LICENSE": {
+      "source": "A-capped-prediction/tests/reference/LICENSE",
+      "source_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "copied_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "body_assertions_byte_identical": true
+    },
+    "reference/NOTICE": {
+      "source": "A-capped-prediction/tests/reference/NOTICE",
+      "source_sha256": "833994aaf73805b85b69968302b9c4d2fed37519c8f759e622f0fcd0f7ca988d",
+      "copied_sha256": "833994aaf73805b85b69968302b9c4d2fed37519c8f759e622f0fcd0f7ca988d",
+      "body_assertions_byte_identical": true
+    },
+    "reference/NvtTouchCore.c": {
+      "source": "A-capped-prediction/tests/reference/NvtTouchCore.c",
+      "source_sha256": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4",
+      "copied_sha256": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4",
+      "body_assertions_byte_identical": true
+    },
+    "reference/NvtTouchCore.h": {
+      "source": "A-capped-prediction/tests/reference/NvtTouchCore.h",
+      "source_sha256": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e",
+      "copied_sha256": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e",
+      "body_assertions_byte_identical": true
+    },
+    "reference/PROVENANCE.txt": {
+      "source": "A-capped-prediction/tests/reference/PROVENANCE.txt",
+      "source_sha256": "2f4cd70178c65b460ce5620758e56516efe4a4454bbb02697037167bdfe28eb6",
+      "copied_sha256": "2f4cd70178c65b460ce5620758e56516efe4a4454bbb02697037167bdfe28eb6",
+      "body_assertions_byte_identical": true
+    },
+    "shape/test_shape.c": {
+      "source": "V3/prototype/shape/test_shape.c",
+      "source_sha256": "119e5fdeafecfd1282738c3e8065ba272ca4e72f6cd6b4258d4157d6f185bd34",
+      "copied_sha256": "f98b9871d69b75b66266f3afef642f4e026751baed1a71590eaf01f1baa75263",
+      "only_change": "standalone include changed to production inline include",
+      "body_assertions_byte_identical": true
+    }
+  },
+  "baseline_HID_source": {
+    "repo": "UniXNU/ShengHidInput",
+    "commit": "71a40e76daeae1bb4127546f96ffa7339c7a06ff",
+    "full_source_sha256": "ea357ccfe634b078cc47a7c0180cd10f01fef099701654eb64dc87afd9f76ac2",
+    "function_sha256": "364d5744d3ee4145f349eddc5ad8cd37e744d15593239fb5d1487937eedfec7e"
+  },
+  "group_case_counts": {
+    "original_contracts": 17,
+    "V3_core": 13,
+    "independent_actual_Core_Engine": 21,
+    "shape_geometry": 14,
+    "HID_planner_and_extracted_sender": 14
+  },
+  "named_cases": 79,
+  "nested_properties": {
+    "legacy_author_matrix_comparisons": 1200,
+    "HID_Core12_set_transitions": 9936
+  },
+  "pure_C_HID_header_compile_check": 1,
+  "report_bytes": 62,
+  "real_sensor_data_or_identity": false
+}

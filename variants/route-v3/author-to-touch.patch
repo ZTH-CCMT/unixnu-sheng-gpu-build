@@ -1,3 +1,155 @@
+diff --git a/device/drivers/ShengHidInput/NativeHidInput.cpp b/device/drivers/ShengHidInput/NativeHidInput.cpp
+--- a/device/drivers/ShengHidInput/NativeHidInput.cpp
++++ b/device/drivers/ShengHidInput/NativeHidInput.cpp
+@@ -10,6 +10,7 @@
+ #include "OriginalHidDeviceABI.h"
+ #endif
+ #include <IOKit/IOBufferMemoryDescriptor.h>
++#include "NativeHidTouchPlan.h"
+ #include <IOKit/IOWorkLoop.h>
+ #include <IOKit/IOTimerEventSource.h>
+ #include <libkern/c++/OSString.h>
+@@ -286,47 +287,38 @@
+         int ids[TOUCH_FINGERS],xs[TOUCH_FINGERS],ys[TOUCH_FINGERS];
+         for(unsigned i=0;i<count;++i){ids[i]=native_touch_ids[i];xs[i]=native_touch_xs[i];ys[i]=native_touch_ys[i];}
+         __asm__ volatile("dmb ish":::"memory");
+-        if(native_touch_seq!=before)return;      // torn read: retry on the next tick
+-        self->lastSeq=before;
+-        // Sizes follow the axis maxima of the touch core: 30480 long, 20320 short, mapped to the same 0..32767 range.
+-        unsigned char report[1+TOUCH_FINGERS*6+1]={3};
+-        unsigned slot=0;
+-        int nextIds[TOUCH_FINGERS],nextX[TOUCH_FINGERS],nextY[TOUCH_FINGERS];
+-        for(unsigned i=0;i<count && slot<TOUCH_FINGERS;++i,++slot) {
+-            unsigned x=transformCoordinate(xs[i],30480),y=transformCoordinate(ys[i],20320);
+-            unsigned char *f=report+1+slot*6;
+-            f[0]=3;f[1]=(unsigned char)(ids[i]&0xff);f[2]=(unsigned char)x;f[3]=(unsigned char)(x>>8);f[4]=(unsigned char)y;f[5]=(unsigned char)(y>>8);   // tip, valid
+-            nextIds[slot]=ids[i];nextX[slot]=(int)x;nextY[slot]=(int)y;
+-        }
+-        const unsigned downCount=slot;
+-        if(downCount>=2)edge::native_touch_hid_multi[0]=edge::native_touch_hid_multi[0]+1;
+-        if(downCount>edge::native_touch_hid_multi[1])edge::native_touch_hid_multi[1]=downCount;
+-        // Identifiers that were down and are gone: tip up at the last known position. They are matched by identifier, not by slot:
+-        // the producer packs its fingers, so when one lifts the others move down a slot and a slot match would lift a finger still
+-        // down and leave the lifted one stuck.
+-        for(unsigned j=0;j<TOUCH_FINGERS;++j) {
+-            const int id=self->prevIds[j];
+-            if(id<0)continue;
+-            bool kept=false;
+-            for(unsigned i=0;i<downCount && !kept;++i)kept=(ids[i]&0xff)==(id&0xff);
+-            if(kept || slot>=TOUCH_FINGERS)continue;
+-            unsigned char *f=report+1+slot*6;
+-            f[0]=2;f[1]=(unsigned char)(id&0xff);   // tip up, valid
+-            f[2]=(unsigned char)self->prevX[j];f[3]=(unsigned char)(self->prevX[j]>>8);
+-            f[4]=(unsigned char)self->prevY[j];f[5]=(unsigned char)(self->prevY[j]>>8);
+-            ++slot;edge::native_touch_hid_multi[2]=edge::native_touch_hid_multi[2]+1;
+-        }
+-        for(unsigned j=0;j<TOUCH_FINGERS;++j) {
+-            self->prevIds[j]=j<downCount?nextIds[j]:-1;
+-            if(j<downCount){self->prevX[j]=nextX[j];self->prevY[j]=nextY[j];}
+-        }
+-        if(!slot)return;
+-        report[1+TOUCH_FINGERS*6]=(unsigned char)slot;
+-        IOBufferMemoryDescriptor *buffer=IOBufferMemoryDescriptor::withBytes(report,sizeof(report),kIODirectionNone);
+-        IOReturn result=buffer?self->submitReport(buffer):kIOReturnNoMemory;
+-        OSSafeReleaseNULL(buffer);
+-        native_hid_input_observed(6,result);
+-        native_touch_hid_reports=native_touch_hid_reports+1;
++        if(native_touch_seq!=before)return;      // torn snapshot: next notification may retry
++        struct nht_state acknowledged={};acknowledged.sequence=self->lastSeq;
++        for(unsigned i=0;i<TOUCH_FINGERS;++i)if(self->prevIds[i]>=0) {
++            const unsigned j=acknowledged.count++;
++            acknowledged.point[j]={self->prevIds[i],self->prevX[i],self->prevY[i]};
++        }
++        struct nht_point current[TOUCH_FINGERS];
++        for(unsigned i=0;i<count;++i)current[i]={ids[i]&0xff,(int)transformCoordinate(xs[i],30480),(int)transformCoordinate(ys[i],20320)};
++        struct nht_plan plan;
++        const int packets=nht_build(&acknowledged,current,count,before,&plan);
++        if(packets<0)return;   // impossible duplicate/out-of-range producer state is not acknowledged
++        if(!packets) {self->lastSeq=before;return;} // both acknowledged/current sets empty
++        for(unsigned phase=0;phase<(unsigned)packets;++phase) {
++            const struct nht_packet &packet=plan.packet[phase];
++            IOBufferMemoryDescriptor *buffer=IOBufferMemoryDescriptor::withBytes(packet.bytes,NHT_REPORT_BYTES,kIODirectionNone);
++            const IOReturn result=buffer?self->submitReport(buffer):kIOReturnNoMemory;
++            OSSafeReleaseNULL(buffer);
++            native_hid_input_observed(6,result);
++            native_touch_hid_reports=native_touch_hid_reports+1;
++            if(result!=kIOReturnSuccess)return; // API error can be ambiguous; no successful ACK invented
++            if(!nht_commit(&acknowledged,&plan,phase,1))return;
++            // Preserve each successful phase, especially if phase2 fails. The
++            // final snapshot sequence advances only after its final packet ACK.
++            for(unsigned j=0;j<TOUCH_FINGERS;++j) {
++                self->prevIds[j]=j<acknowledged.count?acknowledged.point[j].id:-1;
++                if(j<acknowledged.count){self->prevX[j]=acknowledged.point[j].x;self->prevY[j]=acknowledged.point[j].y;}
++            }
++            self->lastSeq=acknowledged.sequence;
++            if(packet.downs>=2)edge::native_touch_hid_multi[0]=edge::native_touch_hid_multi[0]+1;
++            if(packet.downs>edge::native_touch_hid_multi[1])edge::native_touch_hid_multi[1]=packet.downs;
++            edge::native_touch_hid_multi[2]=edge::native_touch_hid_multi[2]+packet.ups;
++        }
+     }
+     // The button driver's thread calls buttonsNotify on every change of the pressed set.
+     static void buttonsNotify(void *context,uint32_t mask) {
+diff --git a/device/drivers/ShengHidInput/NativeHidTouchPlan.h b/device/drivers/ShengHidInput/NativeHidTouchPlan.h
+new file mode 100644
+--- /dev/null
++++ b/device/drivers/ShengHidInput/NativeHidTouchPlan.h
+@@ -0,0 +1,56 @@
++// SPDX-License-Identifier: BSD-2-Clause-Patent
++// Pure report planning/ACK bookkeeping. No allocation, timer, I/O or OS ABI.
++#ifndef NATIVE_HID_TOUCH_PLAN_H
++#define NATIVE_HID_TOUCH_PLAN_H
++#include <stdint.h>
++#include <string.h>
++#define NHT_CONTACTS 10
++#define NHT_REPORT_BYTES (1+NHT_CONTACTS*6+1)
++struct nht_point {int id,x,y;}; // Already normalized0..32767; IDs0..255.
++struct nht_state {uint32_t sequence;unsigned count;struct nht_point point[NHT_CONTACTS];};
++struct nht_packet {unsigned char bytes[NHT_REPORT_BYTES];unsigned entries,downs,ups;struct nht_state acknowledged;};
++struct nht_plan {uint32_t sequence;unsigned count,next;struct nht_packet packet[2];};
++static inline int nht_index(const struct nht_point *p,unsigned count,int id) {for(unsigned i=0;i<count;++i)if(p[i].id==id)return (int)i;return -1;}
++static inline int nht_valid(const struct nht_point *p,unsigned count) {
++ if(count>NHT_CONTACTS || (count && !p))return 0;
++ for(unsigned i=0;i<count;++i)if(p[i].id<0 || p[i].id>255 || p[i].x<0 || p[i].x>32767 || p[i].y<0 || p[i].y>32767 || nht_index(p,i,p[i].id)>=0)return 0;
++ return 1;
++}
++static inline void nht_entry(struct nht_packet *q,const struct nht_point *p,int down) {
++ unsigned char *f=q->bytes+1+q->entries*6;f[0]=(unsigned char)(down?3:2);f[1]=(unsigned char)p->id;
++ f[2]=(unsigned char)p->x;f[3]=(unsigned char)(p->x>>8);f[4]=(unsigned char)p->y;f[5]=(unsigned char)(p->y>>8);
++ ++q->entries;if(down)q->acknowledged.point[q->acknowledged.count++]=*p,++q->downs;else ++q->ups;
++}
++// Returns packetcount0..2, or-1 for invalid input. Input/ack state never mutated.
++// If no packets are needed, caller may commit the empty snapshot's sequence.
++static inline int nht_build(const struct nht_state *ack,const struct nht_point *now,unsigned count,uint32_t sequence,struct nht_plan *plan) {
++ if(!ack || !plan || (sequence&1) || !nht_valid(ack->point,ack->count) || !nht_valid(now,count))return -1;
++ memset(plan,0,sizeof(*plan));plan->sequence=sequence;
++ if(sequence==ack->sequence)return 0;
++ unsigned removed=0;for(unsigned j=0;j<ack->count;++j)if(nht_index(now,count,ack->point[j].id)<0)++removed;
++ if(!count && !removed)return 0;
++ struct nht_packet *first=&plan->packet[0];first->bytes[0]=3;first->acknowledged.sequence=ack->sequence;
++ if(count+removed>NHT_CONTACTS) {
++  // Phase1: only old survivors DOWN plus every vanished old ID UP. Exactly the
++  // old set (<=10) fits. Do not admit new DOWN until the old UP packet succeeds.
++  for(unsigned i=0;i<count;++i)if(nht_index(ack->point,ack->count,now[i].id)>=0)nht_entry(first,&now[i],1);
++  for(unsigned j=0;j<ack->count;++j)if(nht_index(now,count,ack->point[j].id)<0)nht_entry(first,&ack->point[j],0);
++  struct nht_packet *second=&plan->packet[1];second->bytes[0]=3;second->acknowledged.sequence=sequence;
++  for(unsigned i=0;i<count;++i)nht_entry(second,&now[i],1);
++  plan->count=2;
++ } else {
++  for(unsigned i=0;i<count;++i)nht_entry(first,&now[i],1);
++  for(unsigned j=0;j<ack->count;++j)if(nht_index(now,count,ack->point[j].id)<0)nht_entry(first,&ack->point[j],0);
++  first->acknowledged.sequence=sequence;plan->count=1;
++ }
++ for(unsigned i=0;i<plan->count;++i)plan->packet[i].bytes[NHT_REPORT_BYTES-1]=(unsigned char)plan->packet[i].entries;
++ return (int)plan->count;
++}
++// API success acknowledges submission, not delivery to backboardd/UIKit. Errors
++// may be ambiguous; this stores successful API reports only, never exactly-once.
++// A caller may rebuild from this state at its next notification after failure.
++static inline int nht_commit(struct nht_state *ack,struct nht_plan *plan,unsigned index,int report_success) {
++ if(!ack || !plan || index!=plan->next || index>=plan->count || !report_success)return 0;
++ *ack=plan->packet[index].acknowledged;++plan->next;return 1;
++}
++#endif
 diff --git a/device/drivers/ShengNovatekTouch/NvtProtocol.c b/device/drivers/ShengNovatekTouch/NvtProtocol.c
 --- a/device/drivers/ShengNovatekTouch/NvtProtocol.c
 +++ b/device/drivers/ShengNovatekTouch/NvtProtocol.c
@@ -25,10 +177,156 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtProtocol.h b/device/drivers/She
  
  // After the download (mirrors the Linux boot flow): firmware info, idle-baseline update, doze delay, doze mode.
  #define NVT_EVENT_HOST_CMD 0x50
+diff --git a/device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h b/device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h
+new file mode 100644
+--- /dev/null
++++ b/device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h
+@@ -0,0 +1,133 @@
++// SPDX-License-Identifier: Apache-2.0
++// HEADER-ONLY INTEGRATION ADAPTER OF FROZEN INDEPENDENT SHAPE PROTOTYPE.
++// Only linkage/private helper names change; algorithm and metrics types identical.
++// No upstream GPL function body is copied. Same-board Apache2 and iptsd design
++// references are documented in README.txt and the research source index.
++// Requires ordinary-M caller-owned labels/floor; no confidence/palm/UP decision.
++// SENSOR node units/Q16, NOT rotated panel/HID coordinates. exact spatial_rank
++// decides non-collinearity; approximate moment roundness is not a probability.
++// No heap/floating point/hardware I/O. Include this instead of the standalone.h.
++#ifndef NVT_SHAPE_METRICS_INLINE_H
++#define NVT_SHAPE_METRICS_INLINE_H
++// SPDX-License-Identifier: Apache-2.0
++// Independent host-only geometry prototype; no classification, filter or lifecycle.
++#include <stdint.h>
++#define NVT_SHAPE_ROWS 40
++#define NVT_SHAPE_COLUMNS 60
++#define NVT_SHAPE_NODES (NVT_SHAPE_ROWS*NVT_SHAPE_COLUMNS)
++enum { NVT_SHAPE_EDGE_TOP=1, NVT_SHAPE_EDGE_RIGHT=2,
++       NVT_SHAPE_EDGE_BOTTOM=4, NVT_SHAPE_EDGE_LEFT=8 };
++struct nvt_shape_metrics {
++    uint32_t labelled_nodes, support_nodes, support_rows, support_columns;
++    uint32_t spatial_rank; // EXACT support affine rank0/1/2; no moment rounding.
++    uint32_t row_min, row_max, column_min, column_max;
++    uint32_t row_span, column_span, edge_flags;
++    uint32_t peak, floor;
++    uint64_t weight, weight_squared_sum;
++    uint32_t effective_support_q16; // W^2/sum(w^2), nodes in Q16; NOT confidence.
++    uint32_t mean_row_q16, mean_column_q16; // SENSOR node units, not panel pixels.
++    uint32_t variance_row_q16, variance_column_q16; // node^2 Q16.
++    int32_t covariance_q16; // node^2 Q16.
++    uint64_t covariance_determinant_q32; // node^4 Q32, clamped rounding residue.
++    uint32_t roundness_q16; // 4*det/(trace^2), 0..65535; NOT probability.
++    uint32_t background_nodes, background_abs_max, background_abs_mean_q16;
++    int64_t background_mean_q16, peak_minus_background_abs_q16;
++};
++// delta must be exact signed int16-matrix difference, hence [-65535,65535].
++// labels >=0 are blobs; labels <0 are background. Input arrays have2400 entries.
++// weight=max(delta-floor,0) for selected label. floor0..65535 is caller-owned.
++// Returns1 for positive support,0 for no support,-1 invalid input; out zero on failure.
++// No thresholds for finger trust/palm/UP are selected here. No M/P decoding here.
++
++// SPDX-License-Identifier: Apache-2.0
++#include <stddef.h>
++#include <string.h>
++// Computes floor((n/d)*65536) for0<=n<d without n<<16 overflow.
++// All callers have d<=~2^53, hence doubling remainder stays inside uint64_t.
++static inline uint32_t nvt_shape_fraction_q16(uint64_t n,uint64_t d) {
++    uint32_t result=0;
++    for(unsigned i=0;i<16;++i) {
++        n*=2;result*=2;
++        if(n>=d){n-=d;++result;}
++    }
++    return result;
++}
++static inline uint32_t nvt_shape_bits(uint64_t value) {
++    uint32_t count=0;while(value){value&=value-1;++count;}return count;
++}
++static inline int nvt_shape_measure(const int *delta,const int *labels,int label,int floor,
++                      struct nvt_shape_metrics *out) {
++    if(!out)return -1;
++    memset(out,0,sizeof *out);
++    if(!delta || !labels || label<0 || label>=NVT_SHAPE_NODES || floor<0 || floor>65535)return -1;
++    struct nvt_shape_metrics m={0};
++    m.row_min=NVT_SHAPE_ROWS;m.column_min=NVT_SHAPE_COLUMNS;m.floor=(uint32_t)floor;
++    uint64_t rows=0,columns=0,sr=0,sc=0,srr=0,scc=0,src=0;
++    int origin_r=0,origin_c=0,axis_r=0,axis_c=0;
++    for(unsigned i=0;i<NVT_SHAPE_NODES;++i) {
++        const int value=delta[i];
++        if(value < -65535 || value > 65535)return -1;
++        if(labels[i]!=label)continue;
++        ++m.labelled_nodes;
++        if(value<=floor)continue;
++        const uint32_t w=(uint32_t)(value-floor),r=i/NVT_SHAPE_COLUMNS,c=i%NVT_SHAPE_COLUMNS;
++                ++m.support_nodes;
++        // Positive weights have2D covariance iff their support is not collinear.
++        // Test rank exactly; Q16 covariance determinant can misclassify a line.
++        if(m.support_nodes==1){origin_r=(int)r;origin_c=(int)c;}
++        else if(m.spatial_rank==0){axis_r=(int)r-origin_r;axis_c=(int)c-origin_c;m.spatial_rank=1;}
++        else if(m.spatial_rank==1 && ((int)r-origin_r)*axis_c-((int)c-origin_c)*axis_r!=0)m.spatial_rank=2;
++        m.weight+=w;m.weight_squared_sum+=(uint64_t)w*w;
++        sr+=(uint64_t)w*r;sc+=(uint64_t)w*c;
++        srr+=(uint64_t)w*r*r;scc+=(uint64_t)w*c*c;src+=(uint64_t)w*r*c;
++        rows|=UINT64_C(1)<<r;columns|=UINT64_C(1)<<c;
++        if((uint32_t)value>m.peak)m.peak=(uint32_t)value;
++        if(r<m.row_min)m.row_min=r;if(r>m.row_max)m.row_max=r;
++        if(c<m.column_min)m.column_min=c;if(c>m.column_max)m.column_max=c;
++    }
++    if(!m.weight)return 0;
++    m.support_rows=nvt_shape_bits(rows);m.support_columns=nvt_shape_bits(columns);
++    m.row_span=m.row_max-m.row_min+1;m.column_span=m.column_max-m.column_min+1;
++    if(m.row_min==0)m.edge_flags|=NVT_SHAPE_EDGE_TOP;
++    if(m.column_max==NVT_SHAPE_COLUMNS-1)m.edge_flags|=NVT_SHAPE_EDGE_RIGHT;
++    if(m.row_max==NVT_SHAPE_ROWS-1)m.edge_flags|=NVT_SHAPE_EDGE_BOTTOM;
++    if(m.column_min==0)m.edge_flags|=NVT_SHAPE_EDGE_LEFT;
++    m.mean_row_q16=(uint32_t)((sr<<16)/m.weight);
++    m.mean_column_q16=(uint32_t)((sc<<16)/m.weight);
++    // Avoid Srr*W-Sr^2: that form can overflow even with a2400-node valid input.
++    int64_t vr=(int64_t)((srr<<16)/m.weight)-(int64_t)(((uint64_t)m.mean_row_q16*m.mean_row_q16)>>16);
++    int64_t vc=(int64_t)((scc<<16)/m.weight)-(int64_t)(((uint64_t)m.mean_column_q16*m.mean_column_q16)>>16);
++    const int64_t cov=(int64_t)((src<<16)/m.weight)-(int64_t)(((uint64_t)m.mean_row_q16*m.mean_column_q16)>>16);
++    if(vr<0)vr=0;if(vc<0)vc=0;
++    m.variance_row_q16=(uint32_t)vr;m.variance_column_q16=(uint32_t)vc;m.covariance_q16=(int32_t)cov;
++    const int64_t determinant=vr*vc-cov*cov;
++    m.covariance_determinant_q32=determinant>0?(uint64_t)determinant:0;
++    const uint64_t trace=(uint64_t)vr+(uint64_t)vc,denominator=trace*trace;
++    if(denominator) {
++        const uint64_t numerator=4*m.covariance_determinant_q32;
++        m.roundness_q16=numerator>=denominator?65535:nvt_shape_fraction_q16(numerator,denominator);
++    }
++    const uint64_t weight2=m.weight*m.weight;
++    m.effective_support_q16=(uint32_t)((weight2/m.weight_squared_sum)*65536)+nvt_shape_fraction_q16(weight2%m.weight_squared_sum,m.weight_squared_sum);
++    // One-node rectangular exterior ring only. Other labelled blobs are excluded.
++    const unsigned top=m.row_min?m.row_min-1:0,left=m.column_min?m.column_min-1:0;
++    const unsigned bottom=m.row_max+1<NVT_SHAPE_ROWS?m.row_max+1:NVT_SHAPE_ROWS-1;
++    const unsigned right=m.column_max+1<NVT_SHAPE_COLUMNS?m.column_max+1:NVT_SHAPE_COLUMNS-1;
++    uint64_t abs_sum=0;int64_t signed_sum=0;
++    for(unsigned r=top;r<=bottom;++r)for(unsigned c=left;c<=right;++c) {
++        if(r>=m.row_min && r<=m.row_max && c>=m.column_min && c<=m.column_max)continue;
++        const unsigned i=r*NVT_SHAPE_COLUMNS+c;if(labels[i]>=0)continue;
++        const int value=delta[i];const uint32_t absolute=(uint32_t)(value<0?-value:value);
++        ++m.background_nodes;abs_sum+=absolute;signed_sum+=value;
++        if(absolute>m.background_abs_max)m.background_abs_max=absolute;
++    }
++    if(m.background_nodes) {
++        m.background_abs_mean_q16=(uint32_t)((abs_sum<<16)/m.background_nodes);
++        // Signed multiplication avoids left-shifting negative values.
++        m.background_mean_q16=(signed_sum*65536)/(int64_t)m.background_nodes;
++        m.peak_minus_background_abs_q16=(int64_t)m.peak*65536-(int64_t)m.background_abs_mean_q16;
++    }
++    *out=m;return 1;
++}
++
++#endif // NVT_SHAPE_METRICS_INLINE_H
 diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/ShengNovatekTouch/NvtTouchCore.c
 --- a/device/drivers/ShengNovatekTouch/NvtTouchCore.c
 +++ b/device/drivers/ShengNovatekTouch/NvtTouchCore.c
-@@ -55,30 +55,57 @@
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: Apache-2.0
+ // See NvtTouchCore.h and NOTICE. Simplified finger-only reimplementation.
+ #include "NvtTouchCore.h"
++#include "NvtShapeMetricsInline.h"
+ #include <string.h>
+ 
+ static const int kRowMap[NVT_ROWS] = {
+@@ -55,30 +56,54 @@
      for (int id=1;id<=NVT_SLOTS;++id) {
          int taken=0;
          for (int s=0;s<NVT_SLOTS && !taken;++s) taken=core->slots[s].active && core->slots[s].tracking_id==id;
@@ -69,35 +367,32 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
 -    if (weak) return;
 -    const long sx=((long)x*16-slot->fx)*NVT_FRAME_HZ/16,sy=((long)y*16-slot->fy)*NVT_FRAME_HZ/16;
 -    const long speed_alpha=filter_alpha(NVT_SPEED_CUTOFF_MHZ);
-+// Legacy calls freeze sub-down centroids. This isolated experiment instead applies confidence-weighted measured continuation in the
-+// existing up/down hysteresis band for timed calls. This may admit lift-off centroid drift: host tests do not establish hardware safety.
-+static int follow(struct nvt_slot *slot, int x, int y, int peak, uint64_t dt_us, int weak_allowed) {
-+    const int weak=peak<NVT_DOWN_THRESHOLD;
-+    // Independent experiment: only an established, matched ordinary-M contact
-+    // reaches this continuation path. Legacy weak suppression is unchanged.
-+    // Confidence uses the EXISTING hysteresis band; no new down/peak threshold.
-+    if (weak && (!dt_us || !weak_allowed || slot->age<3 || peak<=NVT_UP_THRESHOLD)) return 0;
-+    const long confidence=weak ?
-+        (long)(peak-NVT_UP_THRESHOLD)*65536/(NVT_DOWN_THRESHOLD-NVT_UP_THRESHOLD) : 65536;
++// V3 passes weak=0 only for strong observations or an already-visible ordinary-M
++// contact with nondegenerate spatial support. This is an experimental validity
++// profile, not calibrated sensor confidence. No direction veto or peak-alpha gain.
++static int follow(struct nvt_slot *slot, int x, int y, int weak, uint64_t dt_us) {
++    if (weak) return 0;
 +    // Legacy calls keep their exact fixed-rate arithmetic. Timed calls use the
-+    // actual interval since this slot's last accepted position/filter update.
++    // actual interval since this slot's position/filter state was updated.
++    // The bounded coordinate residual is smaller than INT64_MAX; for a larger
++    // elapsed value its integer derivative is0. Avoid unsigned-to-signed wrap.
 +    const uint64_t velocity_dt=dt_us>(uint64_t)INT64_MAX ? (uint64_t)INT64_MAX : dt_us;
 +    const long sx=dt_us ? (long)(((int64_t)x*16-slot->fx)*1000000/(int64_t)velocity_dt/16) :
 +        ((long)x*16-slot->fx)*NVT_FRAME_HZ/16;
 +    const long sy=dt_us ? (long)(((int64_t)y*16-slot->fy)*1000000/(int64_t)velocity_dt/16) :
 +        ((long)y*16-slot->fy)*NVT_FRAME_HZ/16;
-+    const long speed_alpha=filter_alpha(NVT_SPEED_CUTOFF_MHZ,dt_us)*confidence/65536;
++    const long speed_alpha=filter_alpha(NVT_SPEED_CUTOFF_MHZ,dt_us);
      slot->vx+=(sx-slot->vx)*speed_alpha/65536;slot->vy+=(sy-slot->vy)*speed_alpha/65536;
      const long speed=(slot->vx<0?-slot->vx:slot->vx)+(slot->vy<0?-slot->vy:slot->vy);
 -    const long alpha=filter_alpha(NVT_MIN_CUTOFF_MHZ+speed*NVT_CUTOFF_PER_SPEED/2);
-+    const long alpha=filter_alpha(NVT_MIN_CUTOFF_MHZ+speed*NVT_CUTOFF_PER_SPEED/2,dt_us)*confidence/65536;
++    const long alpha=filter_alpha(NVT_MIN_CUTOFF_MHZ+speed*NVT_CUTOFF_PER_SPEED/2,dt_us);
      slot->fx+=((long)x*16-slot->fx)*alpha/65536;slot->fy+=((long)y*16-slot->fy)*alpha/65536;
      slot->rx=(int)((slot->fx+8)/16);slot->ry=(int)((slot->fy+8)/16);
 +    return 1;
  }
  
  // The reason a tracked finger at (x, y) matched none of this frame's blobs, judged by the nearest blob of any kind.
-@@ -99,17 +126,130 @@
+@@ -99,17 +124,130 @@
      return reason;
  }
  
@@ -238,7 +533,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
  }
  
  // Least-cost assignment of the active fingers (rows) to the blobs plus one "no blob" column per finger (Hungarian method with
-@@ -122,6 +262,8 @@
+@@ -122,6 +260,8 @@
      // During a four/five-finger pinch the fingers can stop together. Extrapolating
      // all their velocities through the stop can swap neighbours at the centre.
      const int predict = n <= 3;
@@ -247,7 +542,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
      const int m=nfound+n;
      long u[NVT_SLOTS+1]={0},v[COLUMNS+1]={0},minv[COLUMNS+1];
      int p[COLUMNS+1]={0},way[COLUMNS+1]={0};char used[COLUMNS+1];
-@@ -133,7 +275,7 @@
+@@ -133,7 +273,7 @@
              const int i0=p[j0];long delta=__LONG_MAX__;int j1=0;
              for (int j=1;j<=m;++j) {
                  if (used[j]) continue;
@@ -256,7 +551,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
                  if (cur<minv[j]) {minv[j]=cur;way[j]=j0;}
                  if (minv[j]<delta) {delta=minv[j];j1=j;}
              }
-@@ -149,7 +291,7 @@
+@@ -149,7 +289,7 @@
      for (int j=1;j<=nfound;++j) {
          if (!p[j]) continue;
          const int s=rows[p[j]];
@@ -265,24 +560,93 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
      }
  }
  
-@@ -172,8 +314,8 @@
+@@ -172,8 +312,32 @@
  
  static int delta_at(const int16_t *m, const int16_t *ref, int index) {return (int)m[index]-(int)ref[index];}
  
 -int nvt_touch_process(struct nvt_touch_core *core, const int16_t *matrix, unsigned frame_type,
 -                      struct nvt_contact *out, int max) {
++static int fast_start_candidate(const struct nvt_touch_core *core,
++                                const struct nvt_contact *found, int nfound,
++                                int blob_label, int npeaks, int npalms,
++                                int overflow, int had_active) {
++    if (!core->timed_enabled || had_active || nfound != 1 || npeaks != 1 ||
++        npalms || overflow || blob_label < 0 ||
++        found[0].peak < 2 * NVT_DOWN_THRESHOLD) return 0;
++    int low_row=NVT_ROWS, high_row=-1, low_col=NVT_COLUMNS, high_col=-1, support=0;
++    for (int node=0;node<NVT_NODES;++node) {
++        if (core->label[node] != blob_label || core->delta[node] < NVT_UP_THRESHOLD) continue;
++        const int row=node/NVT_COLUMNS, col=node%NVT_COLUMNS;
++        if (row<low_row)low_row=row;if(row>high_row)high_row=row;
++        if (col<low_col)low_col=col;if(col>high_col)high_col=col;
++        ++support;
++    }
++    const int rows=high_row-low_row+1, cols=high_col-low_col+1;
++    const int span=2*NVT_MERGE_SPAN+1;
++    // At least three strong nodes spanning both axes, bounded by the existing
++    // merge-neighbourhood span, with >=50% support occupancy in their rectangle.
++    // These are experiment eligibility choices, not learned hardware constants.
++    return support>=3 && rows>=2 && cols>=2 && rows<=span && cols<=span &&
++           support*2>=rows*cols;
++}
++
 +static int process_matrix(struct nvt_touch_core *core, const int16_t *matrix, unsigned frame_type,
 +                          struct nvt_contact *out, int max) {
      if (frame_type != 2 && frame_type != 4) return 0;
      if (frame_type == 2 && !core->have_reference) {
          memcpy(core->reference, matrix, sizeof(core->reference));
-@@ -323,21 +465,57 @@
-         if (!slot->active) continue;
-         const int best=match[s];
-         if (best<0) {
-+            slot->weak_observed=0;
-             const int reason = miss_reason(slot, found, used_contact, nfound, (const int (*)[2])palms, npalms);
-             if (!slot->missed) slot->miss_reason = reason;
+@@ -244,9 +408,12 @@
+     // node whenever the ridge moves; a peak with a stronger one within NVT_MERGE_SPAN nodes is folded into it.
+     struct nvt_contact found[MAX_PEAKS];
+     int match[NVT_SLOTS], reserved[MAX_PEAKS] = {0};
+-    int established = 0;
+-    for (int s = 0; s < NVT_SLOTS; ++s)
+-        if (core->slots[s].active && core->slots[s].age >= 2) ++established;
++    int established = 0, had_active = 0;
++    for (int s = 0; s < NVT_SLOTS; ++s) {
++        if (!core->slots[s].active) continue;
++        had_active=1;
++        if (core->slots[s].age>=2) ++established;
++    }
+     if (established >= 2 && npeaks >= 2) {
+         // Give established fingers a chance to keep separate maxima before merging
+         // a ridge. The final assignment below uses the weighted blob centroids.
+@@ -295,7 +462,8 @@
+         b->sum_w+=w;b->sum_row+=(long)w*kRowMap[i/NVT_COLUMNS]*NVT_SUPER_RESOLUTION;
+         b->sum_col+=(long)w*kColumnMap[i%NVT_COLUMNS]*NVT_SUPER_RESOLUTION;++b->area;
+     }
+-    int nfound=0;
++    int nfound=0,single_blob_label=-1;
++    int spatial_weak[MAX_PEAKS]={0};
+     int palms[MAX_PEAKS][2];int npalms=0;
+     for (int p=0;p<npeaks;++p) {
+         struct blob *b=&blobs[p];
+@@ -309,12 +477,23 @@
+         y=nvt_touch_map_edge_axis(y,NVT_SHORT_AXIS_MAX,1);
+         if (b->area>=NVT_PALM_MIN_NODES) {palms[npalms][0]=x;palms[npalms][1]=y;++npalms;continue;}   // palm-sized, not reported
+         found[nfound].slot=-1;found[nfound].tracking_id=0;found[nfound].x=x;found[nfound].y=y;
+-        found[nfound].peak=b->peak;found[nfound].area=b->area;found[nfound].weight=(int)b->sum_w;++nfound;
++        found[nfound].peak=b->peak;found[nfound].area=b->area;found[nfound].weight=(int)b->sum_w;
++        single_blob_label=p;
++        if(!overflow && b->peak>=NVT_UP_THRESHOLD && b->peak<NVT_DOWN_THRESHOLD) {
++            struct nvt_shape_metrics shape;
++            // Match steepest-ascent support: labels admit delta>=NOISE. Using
++            // floor=NOISE-1 retains those exact boundary nodes. Rank is exact
++            // integer affine rank, not rounded covariance or probability.
++            if(nvt_shape_measure(delta,label,p,NVT_NOISE_THRESHOLD-1,&shape)==1)
++                spatial_weak[nfound]=shape.support_nodes>=3 && shape.spatial_rank==2;
++        }
++        ++nfound;
+     }
+     // Track: the assignment of blobs (above the up threshold, within TRACK_RADIUS of each finger's predicted position) to fingers with
+     // the least total squared distance; a finger may also take no blob, at the cost of the radius. Matching slot by slot let a finger
+     // take its neighbour's blob (int-275: 5 strokes ended "taken"), and so does taking the closest pair first when two fingers move
+     // together; measuring from the last position instead of the predicted one ended fast swipes (13 of 125 strokes ended "far").
++    const int fast_start=fast_start_candidate(core,found,nfound,single_blob_label,npeaks,npalms,overflow,had_active);
+     int used_contact[MAX_PEAKS]={0};
+     assign_tracks(core,found,nfound,match);
+     for (int s=0;s<NVT_SLOTS;++s) if (match[s]>=0) used_contact[match[s]]=1;
+@@ -328,16 +507,41 @@
              // Keep a partial dropout, including a fading signal at the finger.
              // An otherwise quiet matrix with only distant noise is a release.
              ++slot->missed;
@@ -308,18 +672,6 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
 +            if(dt_us>NVT_OBSERVATION_MAX_US)dt_us=NVT_OBSERVATION_MAX_US;
 +            slot->last_interval_us=dt_us;slot->last_observed_us=core->now_us;
 +        }
-+        // A single weak centroid or an immediate reversal is not motion evidence.
-+        // Require two nearby-in-time ordinary weak observations. Raw tracking
-+        // still advances; rejected weak updates do not invent UP or coordinates.
-+        const int previous_dx=slot->dx,previous_dy=slot->dy;
-+        const unsigned previous_weak=slot->weak_observed;
-+        int weak_allowed=0;
-+        if(core->timed_enabled && found[best].peak>NVT_UP_THRESHOLD &&
-+           found[best].peak<NVT_DOWN_THRESHOLD && !slot->missed && dt_us<=NVT_DROPOUT_MAX_US) {
-+            const int64_t alignment=(int64_t)dx*previous_dx+(int64_t)dy*previous_dy;
-+            weak_allowed=previous_weak && (alignment>0 || (dx==0 && dy==0 && previous_dx==0 && previous_dy==0));
-+            slot->weak_observed=1;
-+        } else slot->weak_observed=0;
 +        slot->dx=core->timed_enabled ? dx : dx/(slot->missed+1);
 +        slot->dy=core->timed_enabled ? dy : dy/(slot->missed+1);
          if (slot->missed) {++core->holds_bridged;slot->missed=0;}
@@ -327,17 +679,19 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
          const int px=slot->rx,py=slot->ry;
          slot->x=found[best].x;slot->y=found[best].y;++slot->age;
 -        follow(slot,found[best].x,found[best].y,found[best].peak<NVT_DOWN_THRESHOLD);
++        const int weak=found[best].peak<NVT_DOWN_THRESHOLD &&
++                       !(core->timed_enabled && slot->age>=3 && spatial_weak[best]);
 +        uint64_t filter_dt_us=0;
 +        if(core->timed_enabled) {
 +            filter_dt_us=core->now_us>=slot->last_filter_us ? core->now_us-slot->last_filter_us : 1;
 +            if(filter_dt_us<1)filter_dt_us=1;
 +        }
-+        const int filter_applied=follow(slot,found[best].x,found[best].y,found[best].peak,filter_dt_us,weak_allowed);
++        const int filter_applied=follow(slot,found[best].x,found[best].y,weak,filter_dt_us);
 +        if(core->timed_enabled && filter_applied)slot->last_filter_us=core->now_us;
          // HID decides edge origin from tip-down. Debounce for two samples, but
          // publish the first sample's position on that first visible report.
          if (slot->age == 2) {
-@@ -358,11 +536,21 @@
+@@ -358,11 +562,21 @@
          if (used_contact[c] || found[c].peak<NVT_DOWN_THRESHOLD) continue;
          for (int s=0;s<NVT_SLOTS;++s) {
              if (core->slots[s].active) continue;
@@ -346,22 +700,21 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
 +            if(!core->timed_enabled)core->slots[s].active=1;
 +            const int id=free_tracking_id(core);
 +            if(!id){++core->id_quarantine_drops;continue;}
-+            core->slots[s].active=1;core->slots[s].tracking_id=id;core->slots[s].age=1;core->slots[s].missed=0;
++            core->slots[s].active=1;core->slots[s].tracking_id=id;core->slots[s].age=fast_start ? 2 : 1;core->slots[s].missed=0;
 +            if(core->timed_enabled) {
 +                core->slots[s].born_us=core->now_us;core->slots[s].last_observed_us=core->now_us;
 +                core->slots[s].last_interval_us=8333;
-+                core->slots[s].last_filter_us=core->now_us;
++                core->slots[s].last_filter_us=core->now_us; // Initial measured filter seed.
 +            }
              core->slots[s].x=found[c].x;core->slots[s].y=found[c].y;
              core->slots[s].rx=found[c].x;core->slots[s].ry=found[c].y;
              core->slots[s].fx=(long)found[c].x*16;core->slots[s].fy=(long)found[c].y*16;core->slots[s].vx=core->slots[s].vy=0;
--            core->slots[s].dx=core->slots[s].dy=0;
-+            core->slots[s].dx=core->slots[s].dy=0;core->slots[s].weak_observed=0;
+             core->slots[s].dx=core->slots[s].dy=0;
 +            if(!core->timed_enabled)core->slots[s].last_filter_us=0;
              found[c].slot=s;found[c].tracking_id=core->slots[s].tracking_id;used_contact[c]=1;break;
          }
      }
-@@ -379,3 +567,75 @@
+@@ -379,3 +593,75 @@
      }
      return count;
  }
@@ -440,18 +793,17 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.c b/device/drivers/Sh
 diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.h b/device/drivers/ShengNovatekTouch/NvtTouchCore.h
 --- a/device/drivers/ShengNovatekTouch/NvtTouchCore.h
 +++ b/device/drivers/ShengNovatekTouch/NvtTouchCore.h
-@@ -60,6 +60,10 @@
+@@ -60,6 +60,9 @@
      int dx, dy;      // the last raw step per frame: tracking looks for the blob where the finger is heading
      int missed;      // consecutive frames without a matching blob (held while <= NVT_HOLD_FRAMES)
      int miss_reason; // why the first of those frames had no match (NVT_MISS_*)
 +    // Timed API only. Observation timestamps are not refreshed by special P frames.
 +    uint64_t born_us, last_observed_us, last_interval_us;
-+    uint64_t last_filter_us; // Last accepted filter-state update; rejected weak observations do not refresh it.
-+    unsigned weak_observed; // Consecutive positive weak-M evidence; never refreshed by P.
++    uint64_t last_filter_us; // Last actual position/filter-state update; only accepted filter observations refresh it.
  };
  
  // Why a tracked finger found no blob: none at all, the nearest beyond the tracking radius, below the up threshold, palm-sized, or already
-@@ -86,6 +90,12 @@
+@@ -86,6 +89,12 @@
      // Fingers that went unseen and came back within NVT_HOLD_FRAMES, fingers lifted per miss reason, and frames by type (2 / 4).
      unsigned long holds_bridged, ends[NVT_MISS_KINDS], frames_by_type[2];
      struct nvt_slot slots[NVT_SLOTS];
@@ -464,7 +816,7 @@ diff --git a/device/drivers/ShengNovatekTouch/NvtTouchCore.h b/device/drivers/Sh
      // Scratch for nvt_touch_process: 19 KB, kept here because kernel threads have 16 KiB stacks (a stack probe in the
      // function prologue faulted on hardware when these were locals).
      int delta[NVT_NODES];
-@@ -97,6 +107,23 @@
+@@ -97,6 +106,23 @@
  // (-1 while the startup baseline is still being collected). frame_type 2 = baseline frame.
  int nvt_touch_process(struct nvt_touch_core *core, const int16_t *matrix, unsigned frame_type,
                        struct nvt_contact *out, int max);

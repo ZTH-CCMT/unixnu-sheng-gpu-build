@@ -5,6 +5,8 @@ HERE=Path(__file__).resolve().parent
 LOCK=json.loads((HERE/'os27-update-lock.json').read_text())
 SPEC=LOCK['touch_frame_kind_fix']
 ALLOWED_RUNTIME = {
+    'device/drivers/ShengHidInput/NativeHidTouchPlan.h',
+    'device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h',
     'device/package/TouchProbe.cpp', 'device/package/BootLog.c',
     'device/package/TouchLifecycle.h', 'device/package/TouchRawEvidence.h',
     'device/package/TouchEvidenceWire.h', 'device/package/TouchEvidenceSerialize.h',
@@ -17,6 +19,8 @@ ALLOWED_RUNTIME = {
     'device/drivers/ShengHidInput/NativeHidInput.cpp',
 }
 NEW_HEADERS = {
+    'device/drivers/ShengHidInput/NativeHidTouchPlan.h',
+    'device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h',
     'device/package/TouchLifecycle.h', 'device/package/TouchRawEvidence.h',
     'device/package/TouchEvidenceWire.h', 'device/package/TouchEvidenceSerialize.h',
     'device/package/TouchDiagnosticRecords.h', 'device/package/TouchEngine.h',
@@ -76,7 +80,7 @@ def preflight(top):
         output=HERE/'host-test-results'
         output.mkdir(exist_ok=True)
         env={**os.environ,'TMPDIR':str(parent),'TMP':str(parent),'TEMP':str(parent),'UBSAN_OPTIONS':'halt_on_error=1:print_stacktrace=1','ASAN_OPTIONS':'halt_on_error=1'}
-        subprocess.run([sys.executable,str(temp/'tests/run_ci_tests.py'),'--root',str(temp),'--out',str(output)],check=True,env=env)
+        subprocess.run([sys.executable,str(temp/'tests/run_v3_tests.py'),'--root',str(temp),'--out',str(output)],check=True,env=env)
     print('Synthetic production-code host contracts passed; no hardware success claimed.',flush=True)
 
 if __name__=='__main__':
