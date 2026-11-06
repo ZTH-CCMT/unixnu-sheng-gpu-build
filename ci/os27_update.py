@@ -211,6 +211,66 @@ def build(seed):
     ctx = Context(parser().parse_args(['build', '-D', str(TOP / 'device'), '--os', '27',
                                        '--uefi', str(TOP / 'uefi-sheng')]))
     runtime_dir = ctx.work / 'runtime'
+    # Verify the assembled source actually selected for this exact variant.
+    bindings = {}
+    source_build = ctx.tree / 'build/sheng-source-drivers'
+    driver_report = json.loads((source_build / 'report.json').read_text())
+    require(driver_report.get('compile_pass') is True, 'Source driver compilation report missing')
+    objects = {Path(item['source']).resolve(): item for component in driver_report['components'].values() for item in component['objects']}
+    compilation = {}
+    dependencies = {}
+    for stem in ('NativeHidInput', 'TouchProbe', 'NvtProtocol', 'NvtTouchCore'):
+        command = json.loads((source_build / (stem + '.command.json')).read_text())
+        inputs = json.loads((source_build / (stem + '.inputs.json')).read_text())
+        dependencies.update({str(Path(key).resolve()): value for key, value in inputs.items()})
+        compilation[stem] = {'command': command, 'command_sha256': digest(source_build / (stem + '.command.json')), 'inputs_sha256': digest(source_build / (stem + '.inputs.json'))}
+    for relative, expected in LOCK['touch_frame_kind_fix']['files'].items():
+        actual = (TOP / relative).resolve()
+        require(actual.is_file() and digest(actual) == expected['after'], 'Resolved DEVICE touch source differs: ' + relative)
+        proof = 'source-hash-only'
+        if actual.name in ('NativeHidInput.cpp', 'TouchProbe.cpp', 'NvtProtocol.c', 'NvtTouchCore.c') and '/Test/' not in relative:
+            item = objects.get(actual)
+            require(item is not None and item['source_sha256'] == expected['after'] and digest(Path(item['object'])) == item['object_sha256'], 'Compiled source/object binding differs: ' + relative)
+            require(str(actual) in compilation[actual.stem]['command'], 'Compile command selected a different file: ' + relative)
+            proof = 'exact-compile-command-source-object-hash'
+        elif actual.suffix == '.h':
+            require(dependencies.get(str(actual)) == expected['after'], 'Header was not a compiled dependency: ' + relative)
+            proof = 'compiler-dependency-hash'
+        elif actual.name == 'BootLog.c':
+            selected = ctx.tree / 'kits/sheng/BootLog.c'
+            command_path = ctx.tree / 'build/sheng-source-storage/BootLog.command.json'
+            command = json.loads(command_path.read_text())
+            require(selected.is_file() and selected.resolve() == actual and digest(selected) == expected['after'], 'BootLog source link differs')
+            require(any(Path(arg).resolve() == actual for arg in command if isinstance(arg, str) and arg.endswith('BootLog.c')), 'BootLog compile command selected a different file')
+            compilation['BootLog'] = {'command': command, 'command_sha256': digest(command_path)}
+            proof = 'exact-BootLog-source-link-and-compile-command'
+        bindings[relative] = {'sha256': expected['after'], 'source': str(actual), 'proof': proof}
+    image = (ctx.work / 'kernel/kernel.macho').read_bytes()
+    require(image[:4] == bytes.fromhex('cffaedfe') and len(image) >= 32, 'Unexpected source kernel container')
+    ncmds, = struct.unpack_from('<I', image, 16)
+    pos = 32
+    symtab = None
+    for _ in range(ncmds):
+        cmd, size = struct.unpack_from('<II', image, pos)
+        require(size >= 8 and pos + size <= len(image), 'Invalid kernel load command')
+        if cmd == 2: symtab = struct.unpack_from('<IIII', image, pos + 8)
+        pos += size
+    require(symtab is not None, 'Kernel symbol table missing for touch binding')
+    symoff, count, stroff, strsize = symtab
+    require(count <= 2000000 and symoff + count * 16 <= len(image) and stroff + strsize <= len(image), 'Kernel symbol bounds invalid')
+    required = ['_native_touch_evidence_hid', '_native_touch_evidence_rows', '_native_touch_evidence_enabled'] if LOCK['touch_frame_kind_fix']['variant'] == 'testing' else ['_nvt_touch_process_timed', '_nvt_touch_expire', '_nvt_touch_wait_us', '_native_touch_aggressive_stats']
+    defined = {}
+    for index in range(count):
+        off, kind, section, desc, address = struct.unpack_from('<IBBHQ', image, symoff + index * 16)
+        if off >= strsize: continue
+        end = image.find(b'\0', stroff + off, stroff + strsize)
+        if end < 0: continue
+        name = image[stroff + off:end].decode('utf-8', 'replace')
+        if name in required and kind & 14 and section and address:
+            defined[name] = {'va': hex(address), 'type': kind, 'section': section}
+    require(set(defined) == set(required), 'New touch implementation not defined in final kernel: ' + str(sorted(set(required)-set(defined))))
+    binding_path = runtime_dir / 'touch-source-binding.json'
+    binding_path.write_text(json.dumps({'status': 'SOURCE_HASH_AND_DEFINED_SYMBOLS_PASS_NOT_HARDWARE', 'variant': LOCK['touch_frame_kind_fix']['variant'], 'sources': bindings, 'compile_evidence': compilation, 'kernel_sha256': sha(image), 'defined_symbols': defined}, indent=2) + '\n')
     inputs = json.loads((runtime_dir / 'inputs.json').read_text())
     require(inputs['data_volume_uuid'].upper() == bound_uuid, 'Build used a different Data UUID')
     config = ctx.config_path.read_text()
@@ -227,6 +287,7 @@ def build(seed):
     check_seed(runtime_inputs['data.dbr'])
     cache_report = verify_cache(runtime_dir, runtime_inputs['gpu-addon.bin'], runtime_inputs['trust-cache.bin'])
     allowed = {
+        'touch-source-binding.json': binding_path,
         '.config': ctx.config_path,
         'kernel/kernel.macho': ctx.work / 'kernel/kernel.macho',
         'provisional/DO-NOT-BOOT-payload.img': ctx.work / 'payload/payload.img',

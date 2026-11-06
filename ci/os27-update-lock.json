@@ -76,10 +76,11 @@
     }
   },
   "touch_frame_kind_fix": {
-    "id": "finger-only-thp-touch-lifecycle-v3",
+    "id": "touch-two-versions-20261106-aggressive",
+    "variant": "aggressive",
     "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
     "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
-    "patch_sha256": "608fd6c7c98d47c7622e70795d4e190e02a633b8a8fc35c83073bd2d60955f3d",
+    "patch_sha256": "422ee6eed85343f4c5b1fb8438140d0b6c279b94ec3512c14ddecd5981d8e80c",
     "files": {
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
         "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
@@ -89,61 +90,34 @@
         "before": "c64465269b7a2ebf97b3c426505db91d77170e88a7cc8281e3916b166a0c9ed5",
         "after": "49a2d6b1d021968825685c1f3e0b76dd366e020d53c815cb8b164e6043729553"
       },
+      "device/drivers/ShengNovatekTouch/NvtTouchCore.c": {
+        "before": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4",
+        "after": "e8c98197162bce012fcabf5b13ba87421c2b98a325e435590ecf44ece7cc206f"
+      },
+      "device/drivers/ShengNovatekTouch/NvtTouchCore.h": {
+        "before": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e",
+        "after": "b36a45b3be6241dd164c3711020eeb85fef4072db4c4b34dd3de0a0faae5d19c"
+      },
       "device/drivers/ShengNovatekTouch/Test/nvt-protocol.c": {
         "before": "e337e690bd04834ed2a7052feda5f07e9efeec185466d654a91516a9880aa65b",
         "after": "fa515bb6008f7909c0ca118fdef0f87d3032fa2c02dc8552852ada9101d8c80a"
       },
       "device/package/BootLog.c": {
         "before": "a539f2f5b37c01bbd19596416039aa3fa03d836eac7d2fcdf8eed08e58e263a4",
-        "after": "92742f77056694afe2dc80584b17749355107acd3ceec6b7c65af1000af27f78"
+        "after": "e0d3b7ae7577e924ec56e393b2a97ef7d5ab8dbf44aa3d8822af46f748433f32"
       },
-      "device/package/TouchLifecycle.h": {
+      "device/package/TouchEngine.h": {
         "before": null,
-        "after": "62a6857894bc7ba14412addc37ea8af0cd1038180bcccb1adf219e688c2bcd0e"
+        "after": "cf8496b3da7ad2c584d862c13df7be8851d14b8375606edfe9bc555d4bdc3bea"
       },
       "device/package/TouchProbe.cpp": {
         "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
-        "after": "beee9e863c67a79ac29b64095ab43ce4df6fbb4efee65c058c6e20c83d334a6e"
-      },
-      "device/package/TouchRawEvidence.h": {
-        "before": null,
-        "after": "9a2ab3767f19e853d83405c71058f3ffdc75397de53e440f06fb7d7f214af76a"
-      },
-      "device/package/TouchEvidenceWire.h": {
-        "before": null,
-        "after": "7f4ed4cc276417b61428d4131d85c3008f61362f7e7168c0b8f8362a9fd66a71"
-      },
-      "device/package/TouchEvidenceSerialize.h": {
-        "before": null,
-        "after": "a4f012f06672e5a343e40e0ddc7fd666287dc99a455d1e9a7d5d5ef9ce804a7f"
+        "after": "db8755bc2ffd9998c7485c43bfbf03ba38f6e90a667d39549965b39ba8d201e2"
       }
     },
-    "reference": {
-      "repository": "https://github.com/ianchb/xiaomi-sheng-thp",
-      "commit": "34046210932d654a4c0df0121ecc31c008f8148c",
-      "classification": "Full-frame metadata[257+0x38]==0x1d is a stylus packet, not an ordinary mutual touch matrix"
-    },
-    "change": "Keep stylus packets outside mutual matrices while preserving pending/active finger tracking; release publication only after100ms without any accepted frame; bounded scripted guard; unchanged ordinary coordinates, thresholds, reference and authored display selftest; diagnostic-only bounded raw/reference/slot capture with existing text-log export; not a touch fix",
-    "hardware_cause_not_yet_confirmed": true,
-    "runtime_log_input_added_locally_after_personalization": true,
-    "policy_version": 3,
-    "whole_stream_timeout_us": 100000,
-    "script_guard_retry_ms": 100,
-    "valid_stylus_preserves_tracking": true,
-    "timer_wake_spi": false,
-    "diagnostic_evidence": {
-      "id": "touch-raw-evidence-v1",
-      "diagnostic_only": true,
-      "not_a_fix": true,
-      "algorithm_base_patch_sha256": "e5b77be888b47ee74ad43f9163cea3394b750f6246ac9168f643e569fe05a609",
-      "default_disabled": true,
-      "new_hardware_transactions": false,
-      "changes_root_or_data": false,
-      "samples": 4,
-      "metadata_capacity": 512,
-      "window_after_first_positive_M_us": 2000000,
-      "export": "Bounded repeated text chunks in existing log slots; no export-region or UFS-frequency change",
-      "uploaded_inputs": "Source and synthetic generic identity only; no real UID, logs or captured samples"
-    }
+    "hardware_tested": false,
+    "diagnostic_only": false,
+    "not_a_proven_touch_fix": true,
+    "original_source_frozen": true
   }
 }
