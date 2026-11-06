@@ -1,0 +1,114 @@
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <cassert>
+#include <memory>
+#include <vector>
+#include <string>
+#include <thread>
+#include <atomic>
+#include "TouchRawEvidence.h"
+#include "TouchEvidenceSerialize.h"
+extern "C" {
+#include "NvtTouchCore.h"
+#include "NvtProtocol.h"
+}
+static uint64_t fakeUs;
+static bool enable=true;
+static void *IOMalloc(size_t n){return malloc(n);}
+static void IOFree(void*p,size_t){free(p);}
+static bool PE_parse_boot_argn(const char*,void*out,int){*(unsigned*)out=enable?1:0;return true;}
+@DIAGNOSTIC@
+volatile uint32_t native_touch_seq,native_touch_count,native_touch_hid_reports;
+volatile int native_touch_xs[12],native_touch_ys[12],native_touch_ids[12];
+static void(*gTouchSink)(void*);static void*gTouchSinkContext;
+static void trackStrokes(unsigned,const int*,const int*,const int*){}
+static void native_hid_input_observed(unsigned,int){}
+static void touchEvidence(uint32_t seq,unsigned stage,int result,const uint8_t*report=nullptr,size_t bytes=0){native_touch_evidence_hid(seq,stage,result,report,bytes);}
+namespace edge {uint32_t native_touch_hid_multi[3];}
+struct IOBufferMemoryDescriptor {
+ uint8_t bytes[62];
+ static IOBufferMemoryDescriptor*withBytes(const void*p,size_t n,int){assert(n==62);auto*b=new IOBufferMemoryDescriptor;memcpy(b->bytes,p,n);return b;}
+};
+using IOReturn=int;
+static constexpr int kIODirectionNone=0,kIOReturnNoMemory=-12;
+#define OSSafeReleaseNULL(p) do{delete(p);(p)=nullptr;}while(0)
+class NativeHidInput {
+public:
+ bool driver=true;uint32_t lastSeq=0;int prevIds[10]={-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};int prevX[10]={},prevY[10]={};
+ uint8_t submitted[62]={};unsigned attempts=0;
+ bool hasEventDriverCached(){return driver;}
+ int submitReport(IOBufferMemoryDescriptor*p){memcpy(submitted,p->bytes,62);++attempts;return 0;}
+ enum {TOUCH_FINGERS=10};
+@TRANSFORM@
+@HID@
+};
+@PUBLISH@
+static void sink(void*p){((NativeHidInput*)p)->touchSend();}
+static void frame(uint8_t*raw,unsigned counter,unsigned dt,const int16_t*m){
+ memset(raw,0,5417);raw[259]=(uint8_t)counter;raw[260]=(uint8_t)(counter>>8);
+ raw[261]=0x34;raw[262]=0x12;raw[269]=0xcb;raw[270]=0xed;
+ raw[265]=0x44;raw[266]=0x33;raw[267]=0x22;raw[268]=0x11;
+ raw[273]=0xbb;raw[274]=0xcc;raw[275]=0xdd;raw[276]=0xee;raw[281]=4;raw[313]=(uint8_t)dt;
+ for(unsigned i=0;i<2400;++i){raw[321+2*i]=(uint8_t)m[i];raw[322+2*i]=(uint8_t)((uint16_t)m[i]>>8);}
+}
+int main(int argc,char**argv){
+ assert(argc==2);initRawEvidence(0);assert(native_touch_evidence_enabled);
+ auto a=std::make_unique<nvt_touch_core>();auto b=std::make_unique<nvt_touch_core>();nvt_touch_reset(a.get());nvt_touch_reset(b.get());
+ int16_t m[2400];for(auto&v:m)v=5000;nvt_contact ca[12]={},cb[12]={};nvt_touch_process(a.get(),m,2,ca,12);nvt_touch_process(b.get(),m,2,cb,12);
+ NativeHidInput hid;gTouchSink=sink;gTouchSinkContext=&hid;uint8_t raw[5417],pk[32];unsigned comparisons=0;
+ for(unsigned i=0;i<3400;++i){
+  fakeUs=120000001ull+i*4000ull;bool pen=i%3==0;for(auto&v:m)v=5000;
+  if(i%600>=4&&i%600<300)m[1212+(i/100)%10]=6000;
+  frame(raw,i,pen?0x1d:0,m);memcpy(pk,raw+257,32);assert(nvt_frame_header_valid(raw));assert(nvt_frame_is_stylus(raw)==pen);
+  touch_raw_evidence::FrameInfo info={fakeUs,(uint16_t)i,4,(uint8_t)(pen?0x1d:0),(uint8_t)native_touch_count};
+  auto prepared=rawEvidence.prepare(raw,sizeof raw,pk,sizeof pk,b->reference,2400,b->slots,12,b->have_reference!=0,info);
+  if(!pen){
+   int na=nvt_touch_process(a.get(),m,4,ca,12);int nb=nvt_touch_process(b.get(),m,4,cb,12);
+   assert(na==nb);assert(na<0||!memcmp(ca,cb,(size_t)na*sizeof ca[0]));
+   if(prepared==touch_raw_evidence::AwaitingM){rawEvidence.beginResult(nb);auto start=rawEvidence.triggerTime();if(start)__atomic_store_n(&evidenceTriggerUs,start,__ATOMIC_RELEASE);}
+   if(nb>=0)publish((unsigned)nb,cb,1,rawEvidence.currentSequence());
+   if(prepared==touch_raw_evidence::AwaitingM)assert(rawEvidence.after(nb,cb,12,(uint8_t)native_touch_count,b->slots,12,native_touch_seq));
+   assert(!memcmp(a.get(),b.get(),sizeof(*a)));++comparisons;
+  }else assert(prepared!=touch_raw_evidence::AwaitingM);
+  rawEvidence.guard(fakeUs);
+ }
+ auto*f=rawEvidence.frozenAcquire();assert(f&&f->freeze_reason==touch_raw_evidence::Deadline);assert(f->freeze_time_us-f->trigger_time_us>=12000000);assert(f->metadata_count>2400&&f->metadata_count<8192);
+ assert((f->valid_mask&15)==15);assert(f->samples[1].reference[1212]==5000);assert(f->samples[1].pre_slots[0].age<2);assert(f->samples[1].post_slots[0].age>=2);
+ auto before=std::vector<uint8_t>((const uint8_t*)f,(const uint8_t*)f+sizeof(*f));rawEvidence.guard(fakeUs+1000000);assert(!memcmp(before.data(),f,before.size()));
+ // Exact production HID bytes: report ID3, normalized LE coordinates, explicit UP.
+ evidenceTriggerUs=fakeUs;fakeUs+=1;nvt_contact one={0,9,15240,10160,1000,1,1000};publish(1,&one,1,9999);
+ assert(hid.submitted[0]==3&&hid.submitted[1]==3&&hid.submitted[2]==9&&hid.submitted[61]==1);
+ unsigned hx=hid.submitted[3]|(hid.submitted[4]<<8),hy=hid.submitted[5]|(hid.submitted[6]<<8);assert(hx==(unsigned)(15240ll*32767/30479));assert(hy==(unsigned)(10159ll*32767/20319));
+ publish(0,nullptr,2);assert(hid.submitted[1]==2&&hid.submitted[2]==9&&hid.submitted[61]==1);assert((unsigned)(hid.submitted[3]|(hid.submitted[4]<<8))==hx);
+ // Collector guard neither emits UP nor edits producer state.
+ uint32_t seq=native_touch_seq;rawEvidence.guard(fakeUs+99999999);assert(native_touch_seq==seq);
+ publishEvidence.requestFreeze();hidEvidence.requestFreeze();auto*p=publishEvidence.frozenAcquire();auto*h=hidEvidence.frozenAcquire();assert(p&&h&&p->count&&h->count);
+ unsigned linked=0;for(unsigned i=0;i<h->count;++i)if(h->records[i].stage==5){assert(h->records[i].report_bytes==62&&h->records[i].report[0]==3);for(unsigned j=0;j<p->count;++j)if(h->records[i].publish_sequence==p->records[j].publish_sequence){++linked;break;}}
+ assert(linked>100);std::vector<uint8_t>blob(TouchEvidenceWire::MaxBlob);size_t n=TouchEvidenceSerialize::serialize(*f,*p,*h,blob.data(),blob.size());assert(n>0&&n<TouchEvidenceSerialize::MaximumBytes);assert(!TouchEvidenceSerialize::serialize(*f,*p,*h,blob.data(),n-1));
+ FILE*out=fopen(argv[1],"wb");assert(out&&fwrite(blob.data(),1,n,out)==n&&!fclose(out));
+ std::vector<char>rows(TouchEvidenceWire::RowCapacity);uint32_t crc=TouchEvidenceWire::crc32(blob.data(),n);size_t chunks=(n+TouchEvidenceWire::RawChunk-1)/TouchEvidenceWire::RawChunk;
+ FILE*text=fopen((std::string(argv[1])+".txt").c_str(),"wb");assert(text);for(size_t i=0;i<chunks;++i){size_t got=TouchEvidenceWire::rows(rows.data(),rows.size(),blob.data(),n,crc,(uint32_t)i,0x12345678);assert(got>0&&got<rows.size());assert(fwrite(rows.data(),1,got,text)==got);}assert(!fclose(text));assert(!TouchEvidenceWire::rows(rows.data(),rows.size()-1,blob.data(),n,crc,0,1));
+ // Disabled storage untouched; insufficient input never changes the live core.
+ touch_raw_evidence::Collector off;auto poisoned=std::make_unique<touch_raw_evidence::Storage>();memset(poisoned.get(),0xa5,sizeof(*poisoned));assert(off.configure(false,poisoned.get(),0));off.guard(999);assert(((uint8_t*)poisoned.get())[0]==0xa5);
+ // Bounded record overflow and concurrent freeze: all frozen data is immutable.
+ auto rs=std::make_unique<touch_diagnostic::Frozen<touch_diagnostic::Hid>>();touch_diagnostic::Recorder<touch_diagnostic::Hid>rec;rec.configure(rs.get());touch_diagnostic::Hid r={};r.stage=5;
+ for(unsigned i=0;i<4100;++i){rec.append(r);}
+assert(rs->count==4096&&rs->overflow==4);rec.requestFreeze();auto*rf=rec.frozenAcquire();assert(rf);auto saved=std::vector<uint8_t>((const uint8_t*)rf,(const uint8_t*)rf+sizeof(*rf));rec.append(r);assert(!memcmp(saved.data(),rf,saved.size()));
+ auto cs=std::make_unique<touch_diagnostic::Frozen<touch_diagnostic::Hid>>();touch_diagnostic::Recorder<touch_diagnostic::Hid>con;con.configure(cs.get());std::atomic<bool>go{false};std::vector<std::thread>workers;
+ for(unsigned j=0;j<4;++j){workers.emplace_back([&]{while(!go.load()){}for(unsigned i=0;i<10000;++i)con.append(r);});}
+ go.store(true);con.requestFreeze();for(auto&th:workers)th.join();assert(con.frozenAcquire()&&cs->count<=4096);
+
+ // Metadata exhaustion freezes once without writing a single byte beyond capacity.
+ auto ms=std::make_unique<touch_raw_evidence::Storage>();touch_raw_evidence::Collector mc;assert(mc.configure(true,ms.get(),0));
+ for(unsigned i=0;i<8200;++i){touch_raw_evidence::FrameInfo fi={1ull+i*100ull,(uint16_t)i,4,0,1};auto q=mc.prepare(raw,5417,pk,32,b->reference,2400,b->slots,12,true,fi);if(q==touch_raw_evidence::AwaitingM)mc.after(1,&one,1,1,b->slots,12,2);}
+ auto*mf=mc.frozenAcquire();assert(mf&&mf->freeze_reason==touch_raw_evidence::MetadataFull&&mf->metadata_count==8192);
+ // More contact changes than raw slots: raw selection is bounded, not full raw history.
+ auto xs=std::make_unique<touch_raw_evidence::Storage>();touch_raw_evidence::Collector xc;assert(xc.configure(true,xs.get(),0));
+ touch_raw_evidence::FrameInfo pi={1,0,4,0x1d,0};assert(xc.prepare(raw,5417,pk,32,b->reference,2400,b->slots,12,true,pi)==touch_raw_evidence::CapturedP);
+ for(unsigned i=0;i<1250;++i){touch_raw_evidence::FrameInfo fi={2ull+i*10000ull,(uint16_t)i,4,0,0};auto q=xc.prepare(raw,5417,pk,32,b->reference,2400,b->slots,12,true,fi);if(q==touch_raw_evidence::AwaitingM)xc.after((i%2)?0:1,&one,1,0,b->slots,12,0);}
+ auto*xf=xc.frozenAcquire();assert(xf&&xf->valid_mask==0xffffffffu&&xf->selection_skipped>0);
+ printf("{\"status\":\"PASS\",\"unchanged_core_comparisons\":%u,\"metadata\":%u,\"publish\":%u,\"hid\":%u,\"linked_submit_reports\":%u,\"wire_bytes\":%zu,\"chunks\":%zu,\"minimum_export_seconds\":%zu}\n",comparisons,f->metadata_count,p->count,h->count,linked,n,chunks,chunks*2);
+}

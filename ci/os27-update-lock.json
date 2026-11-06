@@ -76,11 +76,16 @@
     }
   },
   "touch_frame_kind_fix": {
-    "id": "finger-only-thp-touch-lifecycle-v3",
+    "id": "touch-two-versions-20261106-testing",
+    "variant": "testing",
     "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
     "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
-    "patch_sha256": "608fd6c7c98d47c7622e70795d4e190e02a633b8a8fc35c83073bd2d60955f3d",
+    "patch_sha256": "da28def2900ab9d3662d0c358936e137fd177cd267c15d86ea9eecae61ef634c",
     "files": {
+      "device/drivers/ShengHidInput/NativeHidInput.cpp": {
+        "before": "ea357ccfe634b078cc47a7c0180cd10f01fef099701654eb64dc87afd9f76ac2",
+        "after": "b861e99dbe0b12df91156b2438478fe2157b0063011f7716ff29145580260243"
+      },
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
         "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
         "after": "e36aca444f6fe955325a6a0c43383c209ffd538a2ee1b98042e3ae9a6b0ff6b0"
@@ -95,7 +100,19 @@
       },
       "device/package/BootLog.c": {
         "before": "a539f2f5b37c01bbd19596416039aa3fa03d836eac7d2fcdf8eed08e58e263a4",
-        "after": "92742f77056694afe2dc80584b17749355107acd3ceec6b7c65af1000af27f78"
+        "after": "f4f164f16774d18b78a448033dea3845214cc4a898d7f761ca7b38a95214a2eb"
+      },
+      "device/package/TouchDiagnosticRecords.h": {
+        "before": null,
+        "after": "8f84ed66775dca17c9e2bb7f6be2ec61a44a0e17e8c680a21b6357edc8bf29e1"
+      },
+      "device/package/TouchEvidenceSerialize.h": {
+        "before": null,
+        "after": "d2fcb16d712862f3e7cb471be6371d3fd89b6ee44263ec3507e3daa656109695"
+      },
+      "device/package/TouchEvidenceWire.h": {
+        "before": null,
+        "after": "39441745cf883ada7190759b0302bdb0854accea5829cfb2ca6bd74011110ec8"
       },
       "device/package/TouchLifecycle.h": {
         "before": null,
@@ -103,47 +120,16 @@
       },
       "device/package/TouchProbe.cpp": {
         "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
-        "after": "beee9e863c67a79ac29b64095ab43ce4df6fbb4efee65c058c6e20c83d334a6e"
+        "after": "a4092eca0877d1d5db26a9695dbdd358d2660fa3fde9b30f3c6070025271a8ad"
       },
       "device/package/TouchRawEvidence.h": {
         "before": null,
-        "after": "9a2ab3767f19e853d83405c71058f3ffdc75397de53e440f06fb7d7f214af76a"
-      },
-      "device/package/TouchEvidenceWire.h": {
-        "before": null,
-        "after": "7f4ed4cc276417b61428d4131d85c3008f61362f7e7168c0b8f8362a9fd66a71"
-      },
-      "device/package/TouchEvidenceSerialize.h": {
-        "before": null,
-        "after": "a4f012f06672e5a343e40e0ddc7fd666287dc99a455d1e9a7d5d5ef9ce804a7f"
+        "after": "ba4980627d580ff1c58af77acfd1eba0c7a3ef93a598748a602a6099e0b57ea8"
       }
     },
-    "reference": {
-      "repository": "https://github.com/ianchb/xiaomi-sheng-thp",
-      "commit": "34046210932d654a4c0df0121ecc31c008f8148c",
-      "classification": "Full-frame metadata[257+0x38]==0x1d is a stylus packet, not an ordinary mutual touch matrix"
-    },
-    "change": "Keep stylus packets outside mutual matrices while preserving pending/active finger tracking; release publication only after100ms without any accepted frame; bounded scripted guard; unchanged ordinary coordinates, thresholds, reference and authored display selftest; diagnostic-only bounded raw/reference/slot capture with existing text-log export; not a touch fix",
-    "hardware_cause_not_yet_confirmed": true,
-    "runtime_log_input_added_locally_after_personalization": true,
-    "policy_version": 3,
-    "whole_stream_timeout_us": 100000,
-    "script_guard_retry_ms": 100,
-    "valid_stylus_preserves_tracking": true,
-    "timer_wake_spi": false,
-    "diagnostic_evidence": {
-      "id": "touch-raw-evidence-v1",
-      "diagnostic_only": true,
-      "not_a_fix": true,
-      "algorithm_base_patch_sha256": "e5b77be888b47ee74ad43f9163cea3394b750f6246ac9168f643e569fe05a609",
-      "default_disabled": true,
-      "new_hardware_transactions": false,
-      "changes_root_or_data": false,
-      "samples": 4,
-      "metadata_capacity": 512,
-      "window_after_first_positive_M_us": 2000000,
-      "export": "Bounded repeated text chunks in existing log slots; no export-region or UFS-frequency change",
-      "uploaded_inputs": "Source and synthetic generic identity only; no real UID, logs or captured samples"
-    }
+    "hardware_tested": false,
+    "diagnostic_only": true,
+    "not_a_proven_touch_fix": true,
+    "original_source_frozen": true
   }
 }

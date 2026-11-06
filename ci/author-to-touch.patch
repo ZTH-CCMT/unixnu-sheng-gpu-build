@@ -1,3 +1,52 @@
+diff --git a/device/drivers/ShengHidInput/NativeHidInput.cpp b/device/drivers/ShengHidInput/NativeHidInput.cpp
+--- a/device/drivers/ShengHidInput/NativeHidInput.cpp
++++ b/device/drivers/ShengHidInput/NativeHidInput.cpp
+@@ -19,6 +19,10 @@
+ #include <ptrauth.h>
+ #endif
+ extern "C" void native_hid_input_observed(unsigned,int);
++extern "C" void native_touch_evidence_hid(uint32_t,unsigned,int,const uint8_t *,size_t) __attribute__((weak_import));
++static void touchEvidence(uint32_t seq,unsigned stage,int result,const uint8_t *report=nullptr,size_t bytes=0) {
++    if(&native_touch_evidence_hid)native_touch_evidence_hid(seq,stage,result,report,bytes);
++}
+ extern "C" void native_hid_live_checkpoint(IOService *);
+ extern "C" bool native_hid_input_requested(void);
+ extern "C" void native_touch_set_sink(void (*)(void *), void *) __attribute__((weak_import));
+@@ -278,15 +282,15 @@
+     }
+     void touchSend() {
+         NativeHidInput *self=this;
+-        if(!self->hasEventDriverCached())return;
++        if(!self->hasEventDriverCached()){touchEvidence(native_touch_seq,1,0);return;}
+         uint32_t before=native_touch_seq;
+-        if((before&1) || before==self->lastSeq)return;
++        if((before&1) || before==self->lastSeq){touchEvidence(before,2,0);return;}
+         __asm__ volatile("dmb ish":::"memory");
+         unsigned count=native_touch_count;if(count>TOUCH_FINGERS)count=TOUCH_FINGERS;
+         int ids[TOUCH_FINGERS],xs[TOUCH_FINGERS],ys[TOUCH_FINGERS];
+         for(unsigned i=0;i<count;++i){ids[i]=native_touch_ids[i];xs[i]=native_touch_xs[i];ys[i]=native_touch_ys[i];}
+         __asm__ volatile("dmb ish":::"memory");
+-        if(native_touch_seq!=before)return;      // torn read: retry on the next tick
++        if(native_touch_seq!=before){touchEvidence(before,3,0);return;}      // torn read: retry on the next tick
+         self->lastSeq=before;
+         // Sizes follow the axis maxima of the touch core: 30480 long, 20320 short, mapped to the same 0..32767 range.
+         unsigned char report[1+TOUCH_FINGERS*6+1]={3};
+@@ -320,13 +324,14 @@
+             self->prevIds[j]=j<downCount?nextIds[j]:-1;
+             if(j<downCount){self->prevX[j]=nextX[j];self->prevY[j]=nextY[j];}
+         }
+-        if(!slot)return;
++        if(!slot){touchEvidence(before,4,0);return;}
+         report[1+TOUCH_FINGERS*6]=(unsigned char)slot;
+         IOBufferMemoryDescriptor *buffer=IOBufferMemoryDescriptor::withBytes(report,sizeof(report),kIODirectionNone);
+         IOReturn result=buffer?self->submitReport(buffer):kIOReturnNoMemory;
+         OSSafeReleaseNULL(buffer);
+         native_hid_input_observed(6,result);
+         native_touch_hid_reports=native_touch_hid_reports+1;
++        touchEvidence(before,5,result,report,sizeof(report));
+     }
+     // The button driver's thread calls buttonsNotify on every change of the pressed set.
+     static void buttonsNotify(void *context,uint32_t mask) {
 diff --git a/device/drivers/ShengNovatekTouch/NvtProtocol.c b/device/drivers/ShengNovatekTouch/NvtProtocol.c
 --- a/device/drivers/ShengNovatekTouch/NvtProtocol.c
 +++ b/device/drivers/ShengNovatekTouch/NvtProtocol.c
@@ -96,19 +145,12 @@ diff --git a/device/package/BootLog.c b/device/package/BootLog.c
  static void writer(void *arg, wait_result_t result) {
    (void)arg; (void)result;
    thread_set_thread_name(current_thread(), "boot_log");
-@@ -1759,11 +1779,18 @@
-     if (&boot_cache_loader_log_capture) boot_cache_loader_log_capture(now);
-     int ok = 1;
-     // Text slot, then the message buffer, then the header that makes both visible.
-+    const size_t raw_reserve=(&native_touch_evidence_enabled &&
-+        __atomic_load_n(&native_touch_evidence_enabled,__ATOMIC_ACQUIRE) && &native_touch_evidence_rows) ? 12288u : 0u;
-     memset(boot_log_buffer, 0, LogSlotBlocks * LogBlock);
-     if(diag==1)snprintf((char *)boot_log_buffer,LogSlotBlocks*LogBlock,
+@@ -1764,6 +1784,12 @@
        "#slot %u t=%us tag=%s latency-issues=7 export-at=%us\n",h.slots_written,now,
        &boot_progress_tag?boot_progress_tag():"",diag_at);
--    else log_groups_filter((char *)boot_log_buffer, compose((char *)boot_log_buffer, LogSlotBlocks * LogBlock, h.slots_written, now));
-+    else log_groups_filter((char *)boot_log_buffer, compose((char *)boot_log_buffer, LogSlotBlocks * LogBlock - raw_reserve, h.slots_written, now));
-+    if(raw_reserve) {
+     else log_groups_filter((char *)boot_log_buffer, compose((char *)boot_log_buffer, LogSlotBlocks * LogBlock, h.slots_written, now));
++    if(&native_touch_evidence_enabled && &native_touch_evidence_rows &&
++       __atomic_load_n(&native_touch_evidence_enabled,__ATOMIC_ACQUIRE)) {
 +      const size_t used=strnlen((char *)boot_log_buffer,LogSlotBlocks*LogBlock);
 +      if(used<LogSlotBlocks*LogBlock)
 +        (void)native_touch_evidence_rows((char *)boot_log_buffer+used,LogSlotBlocks*LogBlock-used,h.slots_written,h.boot_id);
@@ -116,79 +158,89 @@ diff --git a/device/package/BootLog.c b/device/package/BootLog.c
      ok &= native_ufs_log_write(LogSlotFirst + (uint64_t)(h.slots_written % slot_count) * LogSlotBlocks, LogSlotBlocks, boot_log_buffer);
      h.msg_bytes = copy_msgbuf(boot_log_buffer);
      if(diag==1)h.msg_bytes=bl_latency_messages((char *)boot_log_buffer,h.msg_bytes);
+diff --git a/device/package/TouchDiagnosticRecords.h b/device/package/TouchDiagnosticRecords.h
+new file mode 100644
+--- /dev/null
++++ b/device/package/TouchDiagnosticRecords.h
+@@ -0,0 +1,32 @@
++// SPDX-License-Identifier: BSD-2-Clause-Patent
++#ifndef SHENG_TOUCH_DIAGNOSTIC_RECORDS_H
++#define SHENG_TOUCH_DIAGNOSTIC_RECORDS_H
++#include <stdint.h>
++#include <stddef.h>
++namespace touch_diagnostic {
++enum {Capacity=4096,Contacts=12,ReportBytes=62};
++struct Publish {uint64_t time_us,frame_sequence;uint32_t publish_sequence;uint8_t source,count;int32_t ids[Contacts],xs[Contacts],ys[Contacts];};
++// stage:1 no event driver,2 odd/same sequence,3 torn read,4 empty report,5 submit attempted.
++// result is an API return, never an acknowledgement by the UI.
++struct Hid {uint64_t time_us;uint32_t publish_sequence;int32_t result;uint8_t stage,report_bytes;uint8_t report[ReportBytes];};
++template<class Record>struct Frozen {uint32_t count,overflow;uint64_t contention_lower_bound;Record records[Capacity];};
++// Separate recorder per publication/HID producer family. Bounded nonblocking CAS
++// also covers optional script publishers and multiple HID service work loops.
++// 0 idle,1 writer owns buffer,2 immutable. A freeze request never spins/waits.
++template<class Record>class Recorder {
++ Frozen<Record>*s_=nullptr;uint32_t gate_=0,closing_=0;uint64_t contention_=0;
++ void closeOwned(){s_->contention_lower_bound=__atomic_load_n(&contention_,__ATOMIC_RELAXED);__atomic_store_n(&gate_,2u,__ATOMIC_RELEASE);}
++public:
++ void configure(Frozen<Record>*s){s_=s;if(s){s->count=0;s->overflow=0;s->contention_lower_bound=0;}}
++ bool append(const Record&r){
++  if(!s_||__atomic_load_n(&closing_,__ATOMIC_ACQUIRE))return false;
++  uint32_t expected=0;if(!__atomic_compare_exchange_n(&gate_,&expected,1u,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED)){if(expected!=2)__atomic_fetch_add(&contention_,1ull,__ATOMIC_RELAXED);return false;}
++  bool accepted=false;if(!__atomic_load_n(&closing_,__ATOMIC_ACQUIRE)){if(s_->count<Capacity){s_->records[s_->count++]=r;accepted=true;}else ++s_->overflow;}
++  if(__atomic_load_n(&closing_,__ATOMIC_ACQUIRE))closeOwned();else {__atomic_store_n(&gate_,0u,__ATOMIC_RELEASE);if(__atomic_load_n(&closing_,__ATOMIC_ACQUIRE))requestFreeze();}
++  return accepted;
++ }
++ void requestFreeze(){if(!s_)return;__atomic_store_n(&closing_,1u,__ATOMIC_RELEASE);uint32_t expected=0;if(__atomic_compare_exchange_n(&gate_,&expected,1u,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))closeOwned();}
++ const Frozen<Record>*frozenAcquire()const{return s_&&__atomic_load_n(&gate_,__ATOMIC_ACQUIRE)==2?s_:nullptr;}
++};
++}
++#endif
 diff --git a/device/package/TouchEvidenceSerialize.h b/device/package/TouchEvidenceSerialize.h
 new file mode 100644
 --- /dev/null
 +++ b/device/package/TouchEvidenceSerialize.h
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,41 @@
 +// SPDX-License-Identifier: BSD-2-Clause-Patent
 +#ifndef SHENG_TOUCH_EVIDENCE_SERIALIZE_H
 +#define SHENG_TOUCH_EVIDENCE_SERIALIZE_H
 +#include "TouchRawEvidence.h"
++#include "TouchDiagnosticRecords.h"
 +#include "TouchEvidenceWire.h"
 +namespace TouchEvidenceSerialize {
-+enum { Version=1, HeaderBytes=136, SampleBytes=12391, MetadataBytes=17, MaximumBytes=58404 };
-+static inline bool count(uint8_t n) {return n<=touch_raw_evidence::Slots;}
-+static inline bool result(int16_t n) {return n>=touch_raw_evidence::MNotCalled && n<=touch_raw_evidence::Slots;}
-+static inline bool kind(uint8_t n) {return n==touch_raw_evidence::Ordinary || n==touch_raw_evidence::SpecialP;}
-+static inline bool type(uint8_t n) {return n==2 || n==4;}
-+// Caller must obtain Frozen through Collector::frozenAcquire(). Do not pass live
-+// storage. Validating freeze_reason is not a substitute for acquire publication.
-+static inline size_t serialize(const touch_raw_evidence::Frozen &f,uint8_t *out,size_t cap) {
-+    using namespace touch_raw_evidence;
-+    if(!out || f.schema_version!=Version || f.valid_mask>15 || f.metadata_count>MetadataCapacity ||
-+       (f.freeze_reason!=Deadline && f.freeze_reason!=MetadataFull))return 0;
-+    size_t samples=0;
-+    for(unsigned j=0;j<Samples;++j)if(f.valid_mask&(1u<<j)) {
-+        const Sample &s=f.samples[j];++samples;
-+        if(s.selection!=j || !kind(s.kind) || !type(s.type) || !result(s.m_result) ||
-+           s.flags> NoEmptyObserved || s.have_reference>1 || !count(s.active_slot_count) ||
-+           !count(s.pre_published_count) || !count(s.post_published_count) || !count(s.out_count))return 0;
-+    }
-+    for(unsigned j=0;j<f.metadata_count;++j) {
-+        const Metadata &m=f.metadata[j];
-+        if(!kind(m.kind) || !type(m.type) || !result(m.m_result) ||
-+           !count(m.last_published_count) || !count(m.active_slot_count))return 0;
-+    }
-+    const size_t total=HeaderBytes+samples*SampleBytes+(size_t)f.metadata_count*MetadataBytes;
-+    if(total>MaximumBytes || total>TouchEvidenceWire::MaxBlob || cap<total)return 0;
-+    TouchEvidenceWire::Writer w(out,cap);
-+    w.bytes("TEVRAW01",8);w.u32(Version);w.u32((uint32_t)total);w.u32(f.valid_mask);
-+    w.u32(f.metadata_count);w.u32(f.freeze_reason);w.u32(40);w.u32(60);w.u32(Nodes);
-+    w.u32(RawBytes);w.u32(PeekBytes);w.u32(Slots);w.u32(Samples);
-+    w.u64(f.arm_time_us);w.u64(f.first_event_us);w.u64(f.last_event_us);w.u64(f.freeze_time_us);
-+    w.u64(f.trigger_time_us);w.u64(f.trigger_record_sequence);w.u64(f.observed_frames);
-+    w.u64(f.skipped_before_arm);w.u64(f.skipped_unseeded);w.u64(f.rejected_calls);
-+    for(unsigned j=0;j<Samples;++j)if(f.valid_mask&(1u<<j)) {
-+        const Sample &s=f.samples[j];
-+        w.u64(s.record_sequence);w.u64(s.time_us);w.u16(s.counter);w.u16((uint16_t)s.m_result);
-+        w.u8(s.type);w.u8(s.data_type);w.u8(s.kind);w.u8(s.selection);w.u8(s.flags);
-+        w.u8(s.have_reference);w.u8(s.active_slot_count);w.u8(s.pre_published_count);
-+        w.u8(s.post_published_count);w.u8(s.out_count);
-+        w.bytes(s.raw,RawBytes);w.bytes(s.peek,PeekBytes);
-+        for(unsigned k=0;k<Nodes;++k)w.u16((uint16_t)s.reference[k]);
-+        for(unsigned k=0;k<Slots;++k) {
-+            const SlotState &slt=s.pre_slots[k];
-+            w.i64(slt.active);w.i64(slt.tracking_id);w.i64(slt.age);w.i64(slt.x);w.i64(slt.y);
-+            w.i64(slt.rx);w.i64(slt.ry);w.i64(slt.fx);w.i64(slt.fy);w.i64(slt.vx);w.i64(slt.vy);
-+            w.i64(slt.dx);w.i64(slt.dy);w.i64(slt.missed);w.i64(slt.miss_reason);
-+        }
-+        for(unsigned k=0;k<Slots;++k) {
-+            const ContactState &c=s.out[k];w.i64(c.slot);w.i64(c.tracking_id);w.i64(c.x);w.i64(c.y);
-+            w.i64(c.peak);w.i64(c.area);w.i64(c.weight);
-+        }
-+    }
-+    for(unsigned j=0;j<f.metadata_count;++j) {
-+        const Metadata &m=f.metadata[j];w.u64(m.time_us);w.u16(m.counter);w.u16((uint16_t)m.m_result);
-+        w.u8(m.type);w.u8(m.data_type);w.u8(m.kind);w.u8(m.last_published_count);w.u8(m.active_slot_count);
-+    }
-+    return w.ok && w.size==total?w.size:0;
++enum {Version=2,HeaderBytes=172,SampleBytes=13834,MetadataBytes=30,PublishBytes=166,HidBytes=80,
++ MaximumBytes=HeaderBytes+32*SampleBytes+8192*MetadataBytes+4096*PublishBytes+4096*HidBytes};
++static inline void slot(TouchEvidenceWire::Writer&w,const touch_raw_evidence::SlotState&s){w.i64(s.active);w.i64(s.tracking_id);w.i64(s.age);w.i64(s.x);w.i64(s.y);w.i64(s.rx);w.i64(s.ry);w.i64(s.fx);w.i64(s.fy);w.i64(s.vx);w.i64(s.vy);w.i64(s.dx);w.i64(s.dy);w.i64(s.missed);w.i64(s.miss_reason);}
++// All inputs must be independently release-frozen and acquire-obtained.
++// No ABI struct copies. Unused capacities are NOT exported.
++static inline size_t serialize(const touch_raw_evidence::Frozen&f,const touch_diagnostic::Frozen<touch_diagnostic::Publish>&p,const touch_diagnostic::Frozen<touch_diagnostic::Hid>&h,uint8_t*out,size_t cap){
++ using namespace touch_raw_evidence;
++ if(!out||f.schema_version!=Version||f.metadata_count>MetadataCapacity||p.count>touch_diagnostic::Capacity||h.count>touch_diagnostic::Capacity||(f.freeze_reason!=Deadline&&f.freeze_reason!=MetadataFull))return 0;
++ size_t count=0;for(unsigned i=0;i<Samples;++i)if(f.valid_mask&(1u<<i))++count;
++ size_t total=HeaderBytes+count*SampleBytes+(size_t)f.metadata_count*MetadataBytes+(size_t)p.count*PublishBytes+(size_t)h.count*HidBytes;
++ if(total>MaximumBytes||total>TouchEvidenceWire::MaxBlob||cap<total)return 0;
++ TouchEvidenceWire::Writer w(out,cap);w.bytes("TEVRAW02",8);w.u32(Version);w.u32((uint32_t)total);
++ w.u32((uint32_t)count);w.u32(f.metadata_count);w.u32(p.count);w.u32(h.count);w.u32(f.freeze_reason);w.u32(f.valid_mask);
++ w.u32(RawBytes);w.u32(PeekBytes);w.u32(Nodes);w.u32(Slots);w.u32((uint32_t)WindowUs);
++ w.u64(f.arm_time_us);w.u64(f.first_event_us);w.u64(f.last_event_us);w.u64(f.freeze_time_us);w.u64(f.trigger_time_us);w.u64(f.trigger_record_sequence);
++ w.u64(f.observed_frames);w.u64(f.skipped_before_arm);w.u64(f.skipped_unseeded);w.u64(f.rejected_calls);w.u64(f.selection_skipped);
++ w.u32(p.overflow);w.u32(h.overflow);w.u64(p.contention_lower_bound);w.u64(h.contention_lower_bound);
++ for(unsigned i=0;i<Samples;++i)if(f.valid_mask&(1u<<i)){
++  const Sample&s=f.samples[i];if((s.type!=2&&s.type!=4)||(s.kind!=Ordinary&&s.kind!=SpecialP)||s.m_result<MNotCalled||s.m_result>Slots||s.out_count>Slots||s.pre_published_count>Slots||s.post_published_count>Slots||s.have_reference!=1)return 0;
++  w.u64(s.record_sequence);w.u64(s.time_us);w.u32(s.publish_sequence);w.u16(s.counter);w.u16((uint16_t)s.m_result);
++  w.u8(s.type);w.u8(s.data_type);w.u8(s.kind);w.u8(s.selection);w.u8(s.have_reference);w.u8(s.active_slot_count);w.u8(s.pre_published_count);w.u8(s.post_published_count);w.u8(s.out_count);
++  w.bytes(s.raw,RawBytes);w.bytes(s.peek,PeekBytes);for(unsigned j=0;j<Nodes;++j)w.u16((uint16_t)s.reference[j]);
++  for(unsigned j=0;j<Slots;++j){slot(w,s.pre_slots[j]);}
++  for(unsigned j=0;j<Slots;++j){slot(w,s.post_slots[j]);}
++  for(unsigned j=0;j<Slots;++j){const ContactState&c=s.out[j];w.i64(c.slot);w.i64(c.tracking_id);w.i64(c.x);w.i64(c.y);w.i64(c.peak);w.i64(c.area);w.i64(c.weight);}
++ }
++ for(unsigned i=0;i<f.metadata_count;++i){const Metadata&m=f.metadata[i];w.u64(m.record_sequence);w.u64(m.time_us);w.u32(m.publish_sequence);w.u16(m.counter);w.u16((uint16_t)m.m_result);w.u8(m.type);w.u8(m.data_type);w.u8(m.kind);w.u8(m.last_published_count);w.u8(m.pre_active_count);w.u8(m.post_active_count);}
++ for(unsigned i=0;i<p.count;++i){const auto&r=p.records[i];if(r.count>touch_diagnostic::Contacts)return 0;w.u64(r.time_us);w.u64(r.frame_sequence);w.u32(r.publish_sequence);w.u8(r.source);w.u8(r.count);for(unsigned j=0;j<touch_diagnostic::Contacts;++j){w.i32(r.ids[j]);w.i32(r.xs[j]);w.i32(r.ys[j]);}}
++ for(unsigned i=0;i<h.count;++i){const auto&r=h.records[i];if(r.report_bytes>touch_diagnostic::ReportBytes||r.stage<1||r.stage>5)return 0;w.u64(r.time_us);w.u32(r.publish_sequence);w.i32(r.result);w.u8(r.stage);w.u8(r.report_bytes);w.bytes(r.report,touch_diagnostic::ReportBytes);}
++ return w.ok&&w.size==total?w.size:0;
 +}
-+static_assert(HeaderBytes+(size_t)touch_raw_evidence::Samples*SampleBytes+
-+    (size_t)touch_raw_evidence::MetadataCapacity*MetadataBytes==MaximumBytes,"bounded wire size");
-+} // namespace TouchEvidenceSerialize
++static_assert((unsigned)MaximumBytes<=(unsigned)TouchEvidenceWire::MaxBlob,"bounded v2 export");
++}
 +#endif
-\ No newline at end of file
 diff --git a/device/package/TouchEvidenceWire.h b/device/package/TouchEvidenceWire.h
 new file mode 100644
 --- /dev/null
@@ -201,7 +253,7 @@ new file mode 100644
 +#include <stddef.h>
 +#include <string.h>
 +namespace TouchEvidenceWire {
-+enum { MaxBlob = 131072, RawChunk = 4096, RowCapacity = 12288 };
++enum { MaxBlob = 2097152, RawChunk = 8192, RowCapacity = 18432 };
 +struct Writer {
 +    uint8_t *data; size_t cap, size; bool ok;
 +    Writer(uint8_t *d, size_t c):data(d),cap(c),size(0),ok(d != NULL) {}
@@ -242,15 +294,15 @@ new file mode 100644
 +    const size_t chunks=(total+RawChunk-1)/RawChunk;
 +    const size_t off=(slot%chunks)*RawChunk, n=total-off<(size_t)RawChunk?total-off:(size_t)RawChunk;
 +    size_t at=0;out[0]=0;
-+    if(!literal(out,cap,at,"[touch evidence] format=TEV1 boot=") || !number(out,cap,at,bootId,16,16) ||
-+       !literal(out,cap,at," generation=1 total=") || !number(out,cap,at,total) ||
++    if(!literal(out,cap,at,"[touch evidence] format=TEV2 boot=") || !number(out,cap,at,bootId,16,16) ||
++       !literal(out,cap,at," generation=2 total=") || !number(out,cap,at,total) ||
 +       !literal(out,cap,at," crc32=") || !number(out,cap,at,crc,16,8) ||
 +       !literal(out,cap,at," off=") || !number(out,cap,at,off) ||
 +       !literal(out,cap,at," bytes=") || !number(out,cap,at,n) || !literal(out,cap,at,"\n"))return 0;
 +    static const char hex[]="0123456789abcdef";
 +    for(size_t j=0;j<n;j+=128) {
 +        size_t len=n-j<128?n-j:128;
-+        if(!literal(out,cap,at,"TEV1 off=") || !number(out,cap,at,off+j) || !literal(out,cap,at," hex="))return 0;
++        if(!literal(out,cap,at,"TEV2 off=") || !number(out,cap,at,off+j) || !literal(out,cap,at," hex="))return 0;
 +        for(size_t k=0;k<len;++k) {
 +            uint8_t b=blob[off+j+k];char pair[2]={hex[b>>4],hex[b&15]};
 +            if(!append(out,cap,at,pair,2))return 0;
@@ -324,17 +376,18 @@ new file mode 100644
 diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
 --- a/device/package/TouchProbe.cpp
 +++ b/device/package/TouchProbe.cpp
-@@ -17,6 +17,9 @@
+@@ -17,6 +17,10 @@
  #include <mach/mach_time.h>
  #include <IOKit/IOLocks.h>
  #include <pexpert/pexpert.h>
 +#include "TouchLifecycle.h"
 +#include "TouchRawEvidence.h"
 +#include "TouchEvidenceSerialize.h"
++#include "TouchDiagnosticRecords.h"
  extern "C" {
  #include "GeniSpi.h"
  #include "NvtProtocol.h"
-@@ -45,9 +48,56 @@
+@@ -45,9 +49,83 @@
  // min y, max y}. Read by kits/sheng BootLog.c.
  volatile int32_t native_touch_strokes[16][7];
  volatile uint32_t native_touch_stroke_count;
@@ -357,11 +410,27 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
 +namespace {
 +touch_raw_evidence::Collector rawEvidence;
 +touch_raw_evidence::Storage *rawEvidenceStorage;
++touch_diagnostic::Recorder<touch_diagnostic::Publish> publishEvidence;
++touch_diagnostic::Recorder<touch_diagnostic::Hid> hidEvidence;
++touch_diagnostic::Frozen<touch_diagnostic::Publish> *publishEvidenceStorage;
++touch_diagnostic::Frozen<touch_diagnostic::Hid> *hidEvidenceStorage;
++uint64_t evidenceTriggerUs;
++static uint64_t evidenceNowUs() {uint64_t ticks=mach_absolute_time(),hz;__asm__ volatile("mrs %0, cntfrq_el0":"=r"(hz));return hz?(ticks/hz)*1000000ull+(ticks%hz)*1000000ull/hz:0;}
++static bool evidenceWindow(uint64_t now) {uint64_t start=__atomic_load_n(&evidenceTriggerUs,__ATOMIC_ACQUIRE);return start&&now>=start&&now-start<=touch_raw_evidence::WindowUs;}
++
 +static void initRawEvidence(uint64_t nowUs) {
 +    unsigned enable=0;
 +    if(!PE_parse_boot_argn("sheng-touch-raw",&enable,sizeof enable) || enable!=1)return;
 +    rawEvidenceStorage=static_cast<touch_raw_evidence::Storage *>(IOMalloc(sizeof(*rawEvidenceStorage)));
 +    if(!rawEvidenceStorage)return; // A diagnostic allocation failure never fails touch.
++    publishEvidenceStorage=static_cast<touch_diagnostic::Frozen<touch_diagnostic::Publish> *>(IOMalloc(sizeof(*publishEvidenceStorage)));
++    hidEvidenceStorage=static_cast<touch_diagnostic::Frozen<touch_diagnostic::Hid> *>(IOMalloc(sizeof(*hidEvidenceStorage)));
++    if(!publishEvidenceStorage || !hidEvidenceStorage) {
++        if(publishEvidenceStorage)IOFree(publishEvidenceStorage,sizeof(*publishEvidenceStorage));
++        if(hidEvidenceStorage)IOFree(hidEvidenceStorage,sizeof(*hidEvidenceStorage));
++        IOFree(rawEvidenceStorage,sizeof(*rawEvidenceStorage));return;
++    }
++    publishEvidence.configure(publishEvidenceStorage);hidEvidence.configure(hidEvidenceStorage);
 +    // Arm before the normal 3-minute UI observation, not during controller startup.
 +    if(rawEvidence.configure(true,rawEvidenceStorage,nowUs+120000000ull))
 +        __atomic_store_n(&native_touch_evidence_enabled,1u,__ATOMIC_RELEASE);
@@ -372,9 +441,12 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
 +    const auto *f=rawEvidence.frozenAcquire();
 +    if(!f) {
 +        size_t at=0;out[0]=0;
-+        TouchEvidenceWire::literal(out,cap,at,"[touch evidence status] collecting; arm=120s after probe, window=2s after first contact\n");
++        TouchEvidenceWire::literal(out,cap,at,"[touch evidence status] collecting; arm=120s after probe, window=12s after first contact\n");
 +        return at;
 +    }
++    publishEvidence.requestFreeze();hidEvidence.requestFreeze();
++    const auto *p=publishEvidence.frozenAcquire();const auto *h=hidEvidence.frozenAcquire();
++    if(!p || !h)return 0; // Never block touch or the work loop waiting for freeze.
 +    // This function is called by BootLog's one writer only. No cross-thread
 +    // lazy allocation or storage reuse occurs here or in the producer.
 +    static uint8_t *blob;
@@ -383,15 +455,47 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
 +    if(!blob) {
 +        blob=static_cast<uint8_t *>(IOMalloc(TouchEvidenceWire::MaxBlob));
 +        if(!blob)return 0;
-+        bytes=TouchEvidenceSerialize::serialize(*f,blob,TouchEvidenceWire::MaxBlob);
++        bytes=TouchEvidenceSerialize::serialize(*f,*p,*h,blob,TouchEvidenceWire::MaxBlob);
 +        if(!bytes) {IOFree(blob,TouchEvidenceWire::MaxBlob);blob=nullptr;return 0;}
 +        checksum=TouchEvidenceWire::crc32(blob,bytes);
 +    }
 +    return TouchEvidenceWire::rows(out,cap,blob,bytes,checksum,slot,bootId);
++}
++
++extern "C" void native_touch_evidence_hid(uint32_t seq,unsigned stage,int result,const uint8_t *report,size_t bytes) {
++    if(!__atomic_load_n(&native_touch_evidence_enabled,__ATOMIC_RELAXED))return;
++    uint64_t now=evidenceNowUs();if(!evidenceWindow(now))return;
++    touch_diagnostic::Hid r={};r.time_us=now;r.publish_sequence=seq;r.stage=static_cast<uint8_t>(stage);r.result=result;
++    if(report && bytes<=touch_diagnostic::ReportBytes){r.report_bytes=static_cast<uint8_t>(bytes);for(size_t i=0;i<bytes;++i)r.report[i]=report[i];}
++    (void)hidEvidence.append(r);
  }
  
  namespace {
-@@ -585,6 +635,53 @@
+@@ -342,7 +420,7 @@
+ // Set while the scripted input (sheng-swipe) holds a contact down: the panel's own empty frames, which it reports about 110 times a second
+ // with no finger on it, would lift that contact after every scripted frame (int-283: 1247 one-frame strokes, no swipe ever reached the UI).
+ volatile bool gScriptedDown;
+-void publish(unsigned count, const nvt_contact *c) {
++void publish(unsigned count, const nvt_contact *c, uint8_t evidenceSource=0, uint64_t evidenceFrame=0) {
+     int ids[NVT_SLOTS], xs[NVT_SLOTS], ys[NVT_SLOTS];
+     for (unsigned i = 0; i < count && i < NVT_SLOTS; ++i) {
+         ids[i] = c[i].tracking_id; xs[i] = c[i].x; ys[i] = c[i].y < 0 ? c[i].y : (20319 - (c[i].y > 20319 ? 20319 : c[i].y));
+@@ -359,6 +437,14 @@
+     }
+     __asm__ volatile("dmb ish" ::: "memory");
+     native_touch_seq = native_touch_seq + 1;
++    if(__atomic_load_n(&native_touch_evidence_enabled,__ATOMIC_RELAXED)) {
++        uint64_t now=evidenceNowUs();if(evidenceWindow(now)) {
++            touch_diagnostic::Publish r={};r.time_us=now;r.frame_sequence=evidenceFrame;r.publish_sequence=native_touch_seq;
++            r.source=evidenceSource;r.count=static_cast<uint8_t>(count<NVT_SLOTS?count:NVT_SLOTS);
++            for(unsigned i=0;i<r.count;++i){r.ids[i]=ids[i];r.xs[i]=xs[i];r.ys[i]=ys[i];}
++            (void)publishEvidence.append(r);
++        }
++    }
+     if (void (*sink)(void *) = __atomic_load_n(&gTouchSink, __ATOMIC_ACQUIRE)) sink(gTouchSinkContext);
+ }
+ 
+@@ -585,6 +671,53 @@
          }
      }
      IOLockUnlock(pathTrace.lock);
@@ -430,7 +534,7 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
 +    native_touch_contacts = 0;
 +    const auto reports = native_touch_hid_reports;
 +    if (native_touch_count) {
-+        publish(0, nullptr);
++        publish(0, nullptr,2);
 +        native_touch_stream_stats[1] = native_touch_stream_stats[1] + 1;
 +    }
 +    touch_trace_row end = {};
@@ -445,7 +549,7 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
  }
  
  static void touchIrq(void *) {
-@@ -710,6 +807,7 @@
+@@ -710,6 +843,7 @@
          s->core = static_cast<struct nvt_touch_core *>(IOMalloc(sizeof *s->core));
          if (!s->core) {fail(11, -12); break;}
          nvt_touch_reset(s->core);
@@ -453,7 +557,7 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
          mark(*s, 11);
          uint32_t lastCounter = 0xffffffffu;
          unsigned tick = 0, rowTick = 0;
-@@ -724,14 +822,31 @@
+@@ -724,14 +858,31 @@
          unsigned pollOnly = 0;
          PE_parse_boot_argn("sheng-touch-poll", &pollOnly, sizeof pollOnly);
          initPathTrace();
@@ -489,7 +593,7 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
              }
              for (;;) {   // every frame that is ready now
                  native_touch_loop_step = 1;
-@@ -763,7 +878,33 @@
+@@ -763,7 +914,33 @@
                  lastCounter = counter;
                  s->lastType = type;
                  if (type != 2 && type != 4) break;
@@ -523,20 +627,34 @@ diff --git a/device/package/TouchProbe.cpp b/device/package/TouchProbe.cpp
                  int16_t *matrix = s->matrix;
                  nvt_frame_matrix(s->frame, matrix);
                  int mn = matrix[0], mx = matrix[0];
-@@ -795,6 +936,7 @@
+@@ -773,6 +950,11 @@
+                 native_touch_loop_step = 6;
+                 const auto merges = s->core->merges;
+                 const int n = nvt_touch_process(s->core, matrix, type, out, NVT_SLOTS);
++                if(evidencePrepared==touch_raw_evidence::AwaitingM) {
++                    rawEvidence.beginResult(n);
++                    uint64_t start=rawEvidence.triggerTime();
++                    if(start)__atomic_store_n(&evidenceTriggerUs,start,__ATOMIC_RELEASE);
++                }
+                 native_touch_jitter[0] = static_cast<uint32_t>(s->core->jitter_frames);
+                 native_touch_jitter[1] = static_cast<uint32_t>(s->core->jitter_sum);
+                 native_touch_jitter[2] = static_cast<uint32_t>(s->core->jitter_max);
+@@ -794,7 +976,8 @@
+                     const auto reports = native_touch_hid_reports;
                      const auto begins = pathTrace.lock && &native_touch_edge_stats ? native_touch_edge_stats[1] : 0;
                      const auto edges = pathTrace.lock && &native_touch_edge_stats ? native_touch_edge_stats[2] : 0;
-                     publish(static_cast<unsigned>(n), out);
+-                    publish(static_cast<unsigned>(n), out);
++                    publish(static_cast<unsigned>(n), out,1,rawEvidence.currentSequence());
 +                    lifetime.published(static_cast<unsigned>(n));
                      if (pathTrace.lock) {
                          touch_trace_row frame = {};
                          frame.irq_us = touchUs(irq);
-@@ -815,9 +957,15 @@
+@@ -815,9 +998,15 @@
                          recordPaths(*s->core, frame);
                      }
                  }
 +                if(evidencePrepared==touch_raw_evidence::AwaitingM)
-+                    rawEvidence.after(n,out,NVT_SLOTS,static_cast<uint8_t>(native_touch_count));
++                    rawEvidence.after(n,out,NVT_SLOTS,static_cast<uint8_t>(native_touch_count),s->core->slots,NVT_SLOTS,native_touch_seq);
                  if ((++tick & 15) == 0) rows(*s);
                  if (irqArmed && gTouchIrqEvents == seen) break;   // no further pulse: the frame just read was the only one
              }
@@ -551,228 +669,119 @@ diff --git a/device/package/TouchRawEvidence.h b/device/package/TouchRawEvidence
 new file mode 100644
 --- /dev/null
 +++ b/device/package/TouchRawEvidence.h
-@@ -0,0 +1,224 @@
+@@ -0,0 +1,115 @@
 +// SPDX-License-Identifier: BSD-2-Clause-Patent
 +#ifndef SHENG_TOUCH_RAW_EVIDENCE_H
 +#define SHENG_TOUCH_RAW_EVIDENCE_H
-+#include <stddef.h>
 +#include <stdint.h>
-+
-+// Diagnostic evidence only. This header never calls the core, publishes input,
-+// sleeps, accesses hardware, or allocates. The caller owns one Storage and uses
-+// one producer thread. Do not use prepare's return value to gate live processing.
++#include <stddef.h>
++// Diagnostic only: one touch-thread producer; never gates core/publication.
 +namespace touch_raw_evidence {
-+enum { RawBytes=5417, PeekBytes=32, Nodes=2400, Slots=12, Samples=4, MetadataCapacity=512 };
-+enum Kind : uint8_t { Ordinary=1, SpecialP=2 };
-+enum Selection : uint8_t { FirstP=0, FirstPositiveM=1, FollowingM=2, FirstEmptyM=3 };
-+enum SampleFlag : uint8_t { NoEmptyObserved=1 };
-+enum FreezeReason : uint32_t { NotFrozen=0, Deadline=1, MetadataFull=2 };
-+enum Prepared { Ignored, CapturedP, AwaitingM };
-+enum { MNotCalled=-2 };
-+static const uint64_t WindowUs=2000000;
-+
-+// Fixed-width field-by-field projection of nvt_slot; no target ABI/long copy.
-+struct SlotState {
-+    int64_t active, tracking_id, age, x, y, rx, ry;
-+    int64_t fx, fy, vx, vy, dx, dy, missed, miss_reason;
-+};
-+struct ContactState { int64_t slot, tracking_id, x, y, peak, area, weight; };
-+struct FrameInfo {
-+    uint64_t time_us;
-+    uint16_t counter;
-+    uint8_t type, data_type;
-+    uint8_t last_published_count; // Actual producer set, not HID acknowledgement.
-+};
++enum {RawBytes=5417,PeekBytes=32,Nodes=2400,Slots=12,Samples=32,MetadataCapacity=8192};
++enum Kind:uint8_t {Ordinary=1,SpecialP=2};
++enum Selection:uint8_t {FirstP=0,FirstPositiveM=1,FollowingM=2,FirstEmptyM=3,ContactChange=4,KindSwitch=5,TimeBin=6};
++enum FreezeReason:uint32_t {NotFrozen=0,Deadline=1,MetadataFull=2};
++enum Prepared {Ignored,CapturedP,AwaitingM};
++enum {MNotCalled=-2};
++static const uint64_t WindowUs=12000000;
++struct SlotState {int64_t active,tracking_id,age,x,y,rx,ry,fx,fy,vx,vy,dx,dy,missed,miss_reason;};
++struct ContactState {int64_t slot,tracking_id,x,y,peak,area,weight;};
++struct FrameInfo {uint64_t time_us;uint16_t counter;uint8_t type,data_type,last_published_count;};
 +struct Metadata {
-+    uint64_t time_us;
-+    uint16_t counter;
-+    int16_t m_result; // M core result; -2 means no core call for P.
-+    uint8_t type, data_type, kind, last_published_count, active_slot_count;
++ uint64_t record_sequence,time_us;uint32_t publish_sequence;
++ uint16_t counter;int16_t m_result;
++ uint8_t type,data_type,kind,last_published_count,pre_active_count,post_active_count;
 +};
 +struct Sample {
-+    uint64_t record_sequence, time_us;
-+    uint16_t counter;
-+    int16_t m_result;
-+    uint8_t type, data_type, kind, selection, flags;
-+    uint8_t have_reference, active_slot_count, pre_published_count, post_published_count, out_count;
-+    uint8_t raw[RawBytes], peek[PeekBytes];
-+    int16_t reference[Nodes]; // Before this frame's core call.
-+    SlotState pre_slots[Slots];
-+    ContactState out[Slots]; // After this frame's core call; zero for P.
++ uint64_t record_sequence,time_us;uint32_t publish_sequence;
++ uint16_t counter;int16_t m_result;
++ uint8_t type,data_type,kind,selection,have_reference,active_slot_count;
++ uint8_t pre_published_count,post_published_count,out_count;
++ uint8_t raw[RawBytes],peek[PeekBytes];int16_t reference[Nodes];
++ SlotState pre_slots[Slots],post_slots[Slots];ContactState out[Slots];
 +};
 +struct Frozen {
-+    uint32_t schema_version, valid_mask, metadata_count, freeze_reason;
-+    uint64_t arm_time_us, first_event_us, last_event_us, freeze_time_us, trigger_time_us, trigger_record_sequence;
-+    uint64_t observed_frames, skipped_before_arm, skipped_unseeded, rejected_calls;
-+    Sample samples[Samples];
-+    Metadata metadata[MetadataCapacity];
++ uint32_t schema_version,valid_mask,metadata_count,freeze_reason;
++ uint64_t arm_time_us,first_event_us,last_event_us,freeze_time_us,trigger_time_us,trigger_record_sequence;
++ uint64_t observed_frames,skipped_before_arm,skipped_unseeded,rejected_calls,selection_skipped;
++ Sample samples[Samples];Metadata metadata[MetadataCapacity];
 +};
-+// Pending pre-state is internal, not part of the exported Frozen structure.
-+struct Storage { Frozen frozen; Sample pending; };
-+
++struct Storage {Frozen frozen;Sample pending;};
 +class Collector {
-+    Storage *storage_=nullptr;
-+    uint32_t ready_=0;
-+    bool configured_=false, enabled_=false, pending_=false, pending_snapshot_=false, triggered_=false;
-+    uint64_t sequence_=0, last_seen_=0;
-+    bool have_seen_=false;
-+    static void clear(void *p,size_t n) {
-+        uint8_t *b=static_cast<uint8_t *>(p);
-+        for(size_t i=0;i<n;++i)b[i]=0;
-+    }
-+    bool live() const {return enabled_ && __atomic_load_n(&ready_,__ATOMIC_RELAXED)==0;}
-+    bool due(uint64_t now) const {
-+        return triggered_ && now>=storage_->frozen.trigger_time_us &&
-+            now-storage_->frozen.trigger_time_us>=WindowUs;
-+    }
-+    bool reject() {if(live())++storage_->frozen.rejected_calls;return false;}
-+    void finish(FreezeReason why,uint64_t nowUs) {
-+        if(!live())return;
-+        storage_->frozen.freeze_reason=why;
-+        storage_->frozen.freeze_time_us=nowUs;
-+        pending_=false;
-+        // No storage fields may be written after this publication.
-+        __atomic_store_n(&ready_,1u,__ATOMIC_RELEASE);
-+    }
-+    template<class Slot> void snapshot(Sample &s,const uint8_t *raw,const uint8_t *peek,
-+        const int16_t *reference,const Slot *slots,const FrameInfo &f,Kind kind) {
-+        clear(&s,sizeof(s));
-+        s.record_sequence=sequence_;s.time_us=f.time_us;s.counter=f.counter;
-+        s.type=f.type;s.data_type=f.data_type;s.kind=kind;s.have_reference=1;
-+        s.pre_published_count=f.last_published_count;s.post_published_count=f.last_published_count;
-+        s.m_result=MNotCalled;
-+        for(size_t i=0;i<RawBytes;++i)s.raw[i]=raw[i];
-+        for(size_t i=0;i<PeekBytes;++i)s.peek[i]=peek[i];
-+        for(size_t i=0;i<Nodes;++i)s.reference[i]=reference[i];
-+        for(size_t i=0;i<Slots;++i) {
-+            SlotState &d=s.pre_slots[i];const Slot &a=slots[i];
-+            d.active=a.active;d.tracking_id=a.tracking_id;d.age=a.age;d.x=a.x;d.y=a.y;
-+            d.rx=a.rx;d.ry=a.ry;d.fx=a.fx;d.fy=a.fy;d.vx=a.vx;d.vy=a.vy;
-+            d.dx=a.dx;d.dy=a.dy;d.missed=a.missed;d.miss_reason=a.miss_reason;
-+            if(a.active)++s.active_slot_count;
-+        }
-+    }
-+    void latch(Selection which,uint8_t flags=0) {
-+        Frozen &f=storage_->frozen;
-+        if(f.valid_mask&(1u<<which))return;
-+        f.samples[which]=storage_->pending;
-+        f.samples[which].selection=which;f.samples[which].flags=flags;
-+        f.valid_mask|=1u<<which;
-+    }
-+    void append(const Sample &s,int result,uint8_t published) {
-+        Frozen &f=storage_->frozen;
-+        if(!triggered_)return;
-+        if(f.metadata_count>=MetadataCapacity){finish(MetadataFull,s.time_us);return;}
-+        Metadata &m=f.metadata[f.metadata_count++];
-+        m.time_us=s.time_us;m.counter=s.counter;m.m_result=static_cast<int16_t>(result);
-+        m.type=s.type;m.data_type=s.data_type;m.kind=s.kind;
-+        m.last_published_count=published;m.active_slot_count=s.active_slot_count;
-+        if(f.metadata_count==MetadataCapacity)finish(MetadataFull,s.time_us);
-+    }
++ Storage *s_=nullptr;uint32_t ready_=0;
++ bool configured_=false,enabled_=false,pending_=false,triggered_=false,seen_=false;
++ uint64_t seq_=0,last_=0,lastSelected_=0;unsigned next_=4;int previousResult_=-3;uint8_t previousKind_=0;
++ static void zero(void *p,size_t n){uint8_t*b=(uint8_t*)p;for(size_t i=0;i<n;++i)b[i]=0;}
++ bool live()const{return enabled_&&!__atomic_load_n(&ready_,__ATOMIC_RELAXED);}
++ bool due(uint64_t t)const{return triggered_&&t>=s_->frozen.trigger_time_us&&t-s_->frozen.trigger_time_us>=WindowUs;}
++ bool reject(){if(live())++s_->frozen.rejected_calls;return false;}
++ void finish(FreezeReason reason,uint64_t now){if(!live())return;s_->frozen.freeze_reason=reason;s_->frozen.freeze_time_us=now;pending_=false;__atomic_store_n(&ready_,1u,__ATOMIC_RELEASE);}
++ template<class Slot>static uint8_t slots(SlotState *dst,const Slot *src){
++  uint8_t n=0;for(unsigned i=0;i<Slots;++i){SlotState &d=dst[i];const Slot&a=src[i];
++   d.active=a.active;d.tracking_id=a.tracking_id;d.age=a.age;d.x=a.x;d.y=a.y;d.rx=a.rx;d.ry=a.ry;
++   d.fx=a.fx;d.fy=a.fy;d.vx=a.vx;d.vy=a.vy;d.dx=a.dx;d.dy=a.dy;d.missed=a.missed;d.miss_reason=a.miss_reason;if(a.active)++n;
++  }return n;
++ }
++ template<class Slot>void snapshot(const uint8_t*raw,const uint8_t*peek,const int16_t*ref,const Slot*pre,const FrameInfo &i,Kind kind){
++  Sample&p=s_->pending;zero(&p,sizeof p);p.record_sequence=seq_;p.time_us=i.time_us;p.counter=i.counter;
++  p.type=i.type;p.data_type=i.data_type;p.kind=kind;p.have_reference=1;p.m_result=MNotCalled;
++  p.pre_published_count=p.post_published_count=i.last_published_count;
++  for(unsigned j=0;j<RawBytes;++j){p.raw[j]=raw[j];}
++  for(unsigned j=0;j<PeekBytes;++j){p.peek[j]=peek[j];}
++  for(unsigned j=0;j<Nodes;++j){p.reference[j]=ref[j];}p.active_slot_count=slots(p.pre_slots,pre);slots(p.post_slots,pre);
++ }
++ void latch(unsigned index,Selection reason){if(index>=Samples)return;Frozen&f=s_->frozen;if(f.valid_mask&(1u<<index))return;f.samples[index]=s_->pending;f.samples[index].selection=reason;f.valid_mask|=1u<<index;lastSelected_=s_->pending.time_us;}
++ void optional(Selection reason){if(next_<Samples)latch(next_++,reason);else ++s_->frozen.selection_skipped;}
++ void append(int result,uint8_t published,uint8_t postActive,uint32_t pubseq){
++  if(!triggered_){return;}
++  Frozen&f=s_->frozen;const Sample&p=s_->pending;
++  if(f.metadata_count==MetadataCapacity){finish(MetadataFull,p.time_us);return;}
++  Metadata&m=f.metadata[f.metadata_count++];m.record_sequence=p.record_sequence;m.time_us=p.time_us;m.counter=p.counter;
++  m.publish_sequence=pubseq;m.m_result=(int16_t)result;m.type=p.type;m.data_type=p.data_type;m.kind=p.kind;
++  m.last_published_count=published;m.pre_active_count=p.active_slot_count;m.post_active_count=postActive;
++  if(f.metadata_count==MetadataCapacity)finish(MetadataFull,p.time_us);
++ }
 +public:
-+    // Configure once. Disabled calls do not read/write the supplied Storage.
-+    bool configure(bool enabled,Storage *storage,uint64_t armAtUs) {
-+        if(configured_)return false;
-+        configured_=true;
-+        if(!enabled)return true;
-+        if(!storage)return false;
-+        storage_=storage;enabled_=true;
-+        clear(storage_,sizeof(*storage_));
-+        storage_->frozen.schema_version=1;storage_->frozen.arm_time_us=armAtUs;
-+        return true;
-+    }
-+    // Caller has already accepted a complete fresh full-frame header/type2or4.
-+    // No payload/CRC correctness is claimed. haveReference=false is skipped:
-+    // this collector deliberately has no 72-frame startup checkpoint.
-+    template<class Slot> Prepared prepare(const uint8_t *raw,size_t rawLength,
-+        const uint8_t *peek,size_t peekLength,const int16_t *reference,size_t referenceNodes,
-+        const Slot *slots,size_t slotCount,bool haveReference,const FrameInfo &info) {
-+        if(!live())return Ignored;
-+        Frozen &f=storage_->frozen;
-+        if(info.time_us<f.arm_time_us){++f.skipped_before_arm;return Ignored;}
-+        if(pending_){reject();return Ignored;}
-+        if(have_seen_ && info.time_us<last_seen_){reject();return Ignored;}
-+        if(!haveReference){++f.skipped_unseeded;return Ignored;}
-+        if(!raw || rawLength!=RawBytes || !peek || peekLength!=PeekBytes ||
-+            !reference || referenceNodes!=Nodes || !slots || slotCount!=Slots ||
-+            (info.type!=2 && info.type!=4) || info.last_published_count>Slots) {
-+            reject();return Ignored;
-+        }
-+        have_seen_=true;last_seen_=info.time_us;
-+        ++sequence_;++f.observed_frames;
-+        if(f.observed_frames==1)f.first_event_us=info.time_us;
-+        f.last_event_us=info.time_us;
-+        const Kind kind=info.data_type==0x1d?SpecialP:Ordinary;
-+        if(kind==SpecialP) {
-+            // Use pending scratch only when latching the first P. No core call.
-+            Sample &s=storage_->pending;
-+            if(!(f.valid_mask&(1u<<FirstP))) {
-+                snapshot(s,raw,peek,reference,slots,info,kind);latch(FirstP);
-+            } else {
-+                s.record_sequence=sequence_;s.time_us=info.time_us;s.counter=info.counter;
-+                s.type=info.type;s.data_type=info.data_type;s.kind=kind;
-+                s.active_slot_count=0;
-+                for(size_t i=0;i<Slots;++i)if(slots[i].active)++s.active_slot_count;
-+            }
-+            append(s,MNotCalled,info.last_published_count);
-+            if(live() && due(info.time_us))finish(Deadline,info.time_us);
-+            return CapturedP;
-+        }
-+        pending_=true;
-+        pending_snapshot_=(f.valid_mask&14u)!=14u;
-+        Sample &s=storage_->pending;
-+        if(pending_snapshot_)snapshot(s,raw,peek,reference,slots,info,kind);
-+        else {
-+            s.record_sequence=sequence_;s.time_us=info.time_us;s.counter=info.counter;
-+            s.type=info.type;s.data_type=info.data_type;s.kind=kind;
-+            s.active_slot_count=0;
-+            for(size_t i=0;i<Slots;++i)if(slots[i].active)++s.active_slot_count;
-+        }
-+        return AwaitingM;
-+    }
-+    // Call after the ordinary core call and actual normal publication decision.
-+    // lastPublishedCount is the actual shared producer count, not an assumed n.
-+    // This method never publishes, alters core state, or invents an empty set.
-+    template<class Contact> bool after(int n,const Contact *out,size_t available,
-+        uint8_t lastPublishedCount) {
-+        if(!live())return false;
-+        if(!pending_)return reject();
-+        pending_=false;
-+        if(n< -1 || n>Slots || (n>0 && (!out || available<static_cast<size_t>(n))) ||
-+            lastPublishedCount>Slots)return reject();
-+        Sample &s=storage_->pending;Frozen &f=storage_->frozen;
-+        s.m_result=static_cast<int16_t>(n);s.post_published_count=lastPublishedCount;
-+        s.out_count=n>0?static_cast<uint8_t>(n):0;
-+        if(pending_snapshot_ && n>0)for(int i=0;i<n;++i) {
-+            const Contact &a=out[i];ContactState &d=s.out[i];
-+            d.slot=a.slot;d.tracking_id=a.tracking_id;d.x=a.x;d.y=a.y;
-+            d.peak=a.peak;d.area=a.area;d.weight=a.weight;
-+        }
-+        if(n>0 && !triggered_) {
-+            triggered_=true;f.trigger_time_us=s.time_us;f.trigger_record_sequence=s.record_sequence;
-+            latch(FirstPositiveM);
-+        } else if(triggered_ && s.record_sequence>f.trigger_record_sequence) {
-+            if(pending_snapshot_)latch(FollowingM);
-+        }
-+        if(triggered_ && !(f.valid_mask&(1u<<FirstEmptyM)) && n>=0) {
-+            if(n==0)latch(FirstEmptyM);
-+            else if(due(s.time_us))latch(FirstEmptyM,NoEmptyObserved);
-+        }
-+        append(s,n,lastPublishedCount);
-+        if(live() && due(s.time_us))finish(Deadline,s.time_us);
-+        return true;
-+    }
-+    // Invoke only from an existing producer-thread event/guard. No new wakeups.
-+    void guard(uint64_t nowUs) {
-+        if(!live() || pending_)return;
-+        if(have_seen_ && nowUs<last_seen_){reject();return;}
-+        if(due(nowUs))finish(Deadline,nowUs);
-+    }
-+    const Frozen *frozenAcquire() const {
-+        return __atomic_load_n(&ready_,__ATOMIC_ACQUIRE)?&storage_->frozen:nullptr;
-+    }
++ bool configure(bool enabled,Storage*storage,uint64_t arm){if(configured_)return false;configured_=true;if(!enabled)return true;if(!storage)return false;s_=storage;enabled_=true;zero(s_,sizeof*s_);s_->frozen.schema_version=2;s_->frozen.arm_time_us=arm;return true;}
++ uint64_t currentSequence()const{return seq_;}
++ uint64_t triggerTime()const{return triggered_?s_->frozen.trigger_time_us:0;}
++ // Called after the unchanged M core call, before its unchanged publish decision.
++ // Starts secondary recorders soon enough to include the triggering publication.
++ void beginResult(int n){if(live()&&pending_&&n>0&&!triggered_){triggered_=true;s_->frozen.trigger_time_us=s_->pending.time_us;s_->frozen.trigger_record_sequence=s_->pending.record_sequence;}}
++ template<class Slot>Prepared prepare(const uint8_t*raw,size_t rawLength,const uint8_t*peek,size_t peekLength,const int16_t*ref,size_t nodes,const Slot*pre,size_t slotCount,bool haveRef,const FrameInfo&i){
++  if(!live()){return Ignored;}
++  Frozen&f=s_->frozen;if(i.time_us<f.arm_time_us){++f.skipped_before_arm;return Ignored;}
++  if(pending_||(seen_&&i.time_us<last_)){reject();return Ignored;}if(!haveRef){++f.skipped_unseeded;return Ignored;}
++  if(!raw||rawLength!=RawBytes||!peek||peekLength!=PeekBytes||!ref||nodes!=Nodes||!pre||slotCount!=Slots||(i.type!=2&&i.type!=4)||i.last_published_count>Slots){reject();return Ignored;}
++  seen_=true;last_=i.time_us;++seq_;++f.observed_frames;if(f.observed_frames==1)f.first_event_us=i.time_us;f.last_event_us=i.time_us;
++  Kind k=i.data_type==0x1d?SpecialP:Ordinary;
++  if(k==SpecialP){
++   // Full P copies are selected sparsely; metadata covers every accepted P after trigger.
++   bool first=!(f.valid_mask&1u);bool selected=triggered_&&previousKind_!=SpecialP&&i.time_us>=lastSelected_+1000000;
++   if(first||selected)snapshot(raw,peek,ref,pre,i,k);else {Sample&p=s_->pending;p.record_sequence=seq_;p.time_us=i.time_us;p.counter=i.counter;p.type=i.type;p.data_type=i.data_type;p.kind=k;p.active_slot_count=0;for(unsigned j=0;j<Slots;++j)if(pre[j].active)++p.active_slot_count;}
++   if(first)latch(0,FirstP);else if(selected)optional(KindSwitch);
++   append(MNotCalled,i.last_published_count,s_->pending.active_slot_count,0);previousKind_=k;
++   if(live()&&due(i.time_us)){finish(Deadline,i.time_us);}
++   return CapturedP;
++  }
++  pending_=true;snapshot(raw,peek,ref,pre,i,k);return AwaitingM;
++ }
++ template<class Contact,class Slot>bool after(int n,const Contact*out,size_t available,uint8_t published,const Slot*post,size_t slotCount,uint32_t pubseq){
++  if(!live()){return false;}
++  if(!pending_){return reject();}
++  if(n< -1||n>Slots||(n>0&&(!out||available<(size_t)n))||published>Slots||!post||slotCount!=Slots){pending_=false;return reject();}
++  beginResult(n);pending_=false;Sample&p=s_->pending;Frozen&f=s_->frozen;p.m_result=(int16_t)n;p.post_published_count=published;p.publish_sequence=pubseq;p.out_count=n>0?(uint8_t)n:0;
++  uint8_t active=slots(p.post_slots,post);for(int j=0;j<n;++j){const Contact&a=out[j];ContactState&d=p.out[j];d.slot=a.slot;d.tracking_id=a.tracking_id;d.x=a.x;d.y=a.y;d.peak=a.peak;d.area=a.area;d.weight=a.weight;}
++  bool special=false;
++  if(triggered_&&p.record_sequence==f.trigger_record_sequence){latch(1,FirstPositiveM);special=true;}
++  else if(triggered_&&!(f.valid_mask&4u)){latch(2,FollowingM);special=true;}
++  if(triggered_&&n==0&&!(f.valid_mask&8u)){latch(3,FirstEmptyM);special=true;}
++  if(triggered_&&!special){if(n!=previousResult_&&p.time_us>=lastSelected_+200000)optional(ContactChange);else if(previousKind_==SpecialP&&p.time_us>=lastSelected_+1000000)optional(KindSwitch);else if(p.time_us>=lastSelected_+1500000)optional(TimeBin);}
++  append(n,published,active,pubseq);previousResult_=n;previousKind_=Ordinary;if(live()&&due(p.time_us))finish(Deadline,p.time_us);return true;
++ }
++ void guard(uint64_t now){if(!live()||pending_)return;if(seen_&&now<last_){reject();return;}if(due(now))finish(Deadline,now);}
++ const Frozen*frozenAcquire()const{return __atomic_load_n(&ready_,__ATOMIC_ACQUIRE)?&s_->frozen:nullptr;}
 +};
-+static_assert(sizeof(Storage)+sizeof(Collector)<=128u*1024u,"evidence budget");
-+} // namespace touch_raw_evidence
++static_assert(sizeof(Storage)<1024u*1024u,"touch capture storage bound");
++}
 +#endif
-+
