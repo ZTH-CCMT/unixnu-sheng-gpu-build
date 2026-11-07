@@ -1,4 +1,5 @@
 #include "TouchEngine.h"
+#include "TouchAstraProfile.h"
 #include "TouchReportTimeline.h"
 #include <array>
 #include <cassert>
@@ -19,7 +20,7 @@ struct Feed {
  nvt_contact out[NVT_SLOTS]{};uint64_t t=0;unsigned seq=0;
  struct Event{unsigned count;uint64_t ticks;int x;};std::vector<Event> events;
  static bool sink(void*ctx,unsigned n,const nvt_contact*c,uint64_t ticks){auto*f=static_cast<Feed*>(ctx);f->events.push_back({n,ticks,n?c[0].x:0});return true;}
- Feed(){nvt_touch_reset(c.get());nvt_partial_reset(pm.get());line->reset();flat();packet(2,0);assert(e.frame(raw.data(),raw.size(),0,decoded.data(),out,NVT_SLOTS)==-1);}
+ Feed(){nvt_touch_reset(c.get());nvt_partial_reset(pm.get());const auto cfg=touchAstraReportExperimentProfile();assert(nvt_partial_configure(pm.get(),&cfg));line->reset();flat();packet(2,0);assert(e.frame(raw.data(),raw.size(),0,decoded.data(),out,NVT_SLOTS)==-1);}
  void flat(){m.fill(10000);}
  void blob(double x,double y,int amp=1000){for(int r=0;r<40;++r)for(int c=0;c<60;++c)m[r*60+c]=(int16_t)(10000+std::lround(amp*std::exp(-.5*((c-x)*(c-x)+(r-y)*(r-y)/(.85*.85)))));}
  void packet(unsigned type,int block){raw.fill(0);auto*h=raw.data()+NVT_THP_HEADER_LEN;h[2]=(uint8_t)++seq;h[3]=(uint8_t)(seq>>8);h[12]=h[13]=255;for(int i=16;i<20;++i)h[i]=255;h[24]=(uint8_t)type;if(block){raw[313]=0x1d;raw[332]=(uint8_t)block;for(int i=357;i<4197;i+=2){raw[i]=255;raw[i+1]=63;}for(int i=0;i<600;++i){auto v=(uint16_t)m[(block-1)*600+i];raw[4217+2*i]=(uint8_t)v;raw[4218+2*i]=(uint8_t)(v>>8);}}else std::memcpy(raw.data()+321,m.data(),m.size()*2);}

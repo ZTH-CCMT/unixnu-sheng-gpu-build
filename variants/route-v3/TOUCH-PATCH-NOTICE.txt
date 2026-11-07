@@ -1,1 +1,0 @@
-V3 / route-v3: experimental spatial weak-continuation, compact single-M start and HID per-packetACK/two-phaseUP, inheriting frozen route-a. No P/threshold/lifecycle/GPU/WiFi change. Missing ordinary observations remain unresolved. Public synthetic host tests are not native/device qualification. Preserve upstream SPDX/license notices.

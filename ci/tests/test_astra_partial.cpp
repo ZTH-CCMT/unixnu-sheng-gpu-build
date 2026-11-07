@@ -1,6 +1,8 @@
+// V3.1 host regression fixtures for actual integer PM processing.
 // SPDX-License-Identifier: Apache-2.0
 #include "NvtPartialObservation.h"
 #include "NvtProtocol.h"
+#include "TouchAstraProfile.h"
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -28,6 +30,8 @@ struct Fixture {
     uint64_t time=1000;
     Fixture(double x=25.2,double y=19.5) : core(new nvt_touch_core{}),state(new nvt_partial_state{}) {
         nvt_touch_reset(core.get());nvt_partial_reset(state.get());
+        const auto profile=touchAstraReportExperimentProfile();
+        if(!nvt_partial_configure(state.get(),&profile)){std::fprintf(stderr,"FAIL explicit report profile\n");std::exit(1);}
         core->have_reference=1;core->timed_enabled=1;
         for(auto &v:core->reference)v=10000;
         auto &slot=core->slots[0];
@@ -132,6 +136,8 @@ int main() {
         rotated.matrix[r*NVT_COLUMNS+c]=(int16_t)(10000+std::lround(d));
     }
     nvt_partial_reset(rotated.state.get());
+    const auto rotated_profile=touchAstraReportExperimentProfile();
+    if(!nvt_partial_configure(rotated.state.get(),&rotated_profile)){std::fprintf(stderr,"FAIL rotated report profile\n");return 1;}
     nvt_partial_seed(rotated.state.get(),rotated.core.get(),rotated.matrix.data(),rotated.time);
     int rn=rotated.measure(2,out);
     if(rn!=1)std::fprintf(stderr,"rotated reason%d mseQ8%d info%d seed%d\n",rotated.state->last_reason,rotated.state->last_rms_q8,rotated.state->last_information,rotated.state->finger[0].valid);

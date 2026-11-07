@@ -1,7 +1,7 @@
-name: OS27 Astra V3 continuous touch
+name: OS27 Astra V3.1 strict touch
 on:
   push:
-    branches: [os27-astra-touch-20261107]
+    branches: [os27-astra-touch-v3p1-20261107]
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   boot:
-    name: Astra V3 / continuous touch
+    name: Astra V3.1 / strict touch
     runs-on: macos-26
     timeout-minutes: 240
     steps:
@@ -73,7 +73,7 @@ jobs:
           repository: ZTH-CCMT/unixnu-sheng-gpu-build
           run-id: 41767751331
           github-token: ${{ github.token }}
-      - name: Build and verify Astra V3 boot candidate
+      - name: Build and verify Astra V3.1 boot candidate
         id: build_candidate
         env:
           UNIXNU_UNIQUE_CHIP_ID: "13579bdf"
@@ -89,7 +89,7 @@ jobs:
           present=any(p.is_file() for p in Path('pipeline/ci/host-test-results').rglob('*'))
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as stream:stream.write('host_present='+str(present).lower()+'\n')
           PY
-      - name: Quarantine failed V3 build evidence
+      - name: Quarantine failed V3.1 build evidence
         id: quarantine_prepare
         if: ${{ !cancelled() && steps.build_candidate.outcome == 'failure' }}
         env:
@@ -101,7 +101,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
+          name: os27-astra-touch-v3p1-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
           path: os27-update-handoff/
           include-hidden-files: true
           if-no-files-found: error
@@ -117,7 +117,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
+          name: os27-astra-touch-v3p1-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
           path: os27-update-handoff/
           include-hidden-files: true
           if-no-files-found: error
@@ -133,7 +133,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
+          name: os27-astra-touch-v3p1-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
           path: os27-update-handoff/
           include-hidden-files: true
           if-no-files-found: error
@@ -149,7 +149,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
+          name: os27-astra-touch-v3p1-20261107-handoff-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
           path: os27-update-handoff/
           include-hidden-files: true
           if-no-files-found: error
@@ -162,7 +162,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
+          name: os27-astra-touch-v3p1-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
           path: pipeline/ci/host-test-results/
           if-no-files-found: error
           overwrite: false
@@ -177,7 +177,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
+          name: os27-astra-touch-v3p1-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
           path: pipeline/ci/host-test-results/
           if-no-files-found: error
           overwrite: false
@@ -192,7 +192,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
+          name: os27-astra-touch-v3p1-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
           path: pipeline/ci/host-test-results/
           if-no-files-found: error
           overwrite: false
@@ -207,7 +207,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
+          name: os27-astra-touch-v3p1-20261107-host-results-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
           path: pipeline/ci/host-test-results/
           if-no-files-found: error
           overwrite: false
@@ -219,7 +219,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
+          name: os27-astra-touch-v3p1-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try1
           path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
           if-no-files-found: error
           overwrite: false
@@ -234,7 +234,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
+          name: os27-astra-touch-v3p1-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try2
           path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
           if-no-files-found: error
           overwrite: false
@@ -249,7 +249,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
+          name: os27-astra-touch-v3p1-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try3
           path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
           if-no-files-found: error
           overwrite: false
@@ -264,7 +264,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: os27-astra-touch-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
+          name: os27-astra-touch-v3p1-20261107-UNAPPROVED-DO-NOT-BOOT-quarantine-run${{ github.run_id }}-attempt${{ github.run_attempt }}-try4
           path: os27-touch-quarantine-UNAPPROVED_DO_NOT_BOOT/
           if-no-files-found: error
           overwrite: false

@@ -26,12 +26,13 @@ def preflight(top):
    if item['before'] is None:continue
    p=temp/rel;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(top/rel,p)
   # Untouched source dependencies are also copied and pinned by the runner result.
-  for rel in ('device/drivers/ShengNovatekTouch/NvtProtocol.c','device/drivers/ShengNovatekTouch/NvtProtocol.h','device/drivers/ShengNovatekTouch/NvtTouchCore.c','device/drivers/ShengNovatekTouch/NvtTouchCore.h'):
-   p=temp/rel
-   if not p.exists():p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(top/rel,p)
+  for source in sorted((top/'device/drivers/ShengNovatekTouch').glob('*')):
+   if source.suffix not in ('.c','.h'):continue
+   rel=source.relative_to(top);p=temp/rel
+   if not p.exists():p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,p)
   apply_touch_patch(temp);shutil.copytree(HERE/'tests',temp/'tests')
   env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',TMPDIR=str(parent),TMP=str(parent),TEMP=str(parent))
-  subprocess.run([sys.executable,'-B',str(temp/'tests/run_astra_tests.py'),'--root',str(temp),'--out',str(HERE/'host-test-results/astra-contracts')],check=True,env=env)
+  subprocess.run([sys.executable,'-B',str(temp/'tests/run_astra_tests.py'),'--root',str(temp),'--out',str(Path(os.environ.get('ASTRA_PREFLIGHT_OUT',str(HERE/'host-test-results/astra-v3p1-contracts'))).resolve())],check=True,env=env)
 if __name__=='__main__':
  require(sys.argv[1:]==['--preflight'],'Expected --preflight')
  preflight(Path(os.environ.get('GITHUB_WORKSPACE',Path.cwd())))

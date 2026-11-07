@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 // Actual Probe helper extraction, platform stubs, actual Core/Engine/Timeline.
 #include "TouchEngine.h"
+#include "TouchAstraProfile.h"
 #include "TouchReportTimeline.h"
 #include <atomic>
 #include <cassert>
@@ -45,6 +46,8 @@ static nvt_partial_state partial;
 static TouchReportTimeline timeline;
 static void init(Sink &s) {
     nvt_touch_reset(&core);nvt_partial_reset(&partial);timeline.reset();
+    const auto profile=touchAstraReportExperimentProfile();
+    assert(nvt_partial_configure(&partial,&profile));
     native_touch_seq=native_touch_count=native_touch_ack_seq=0;native_touch_time_ticks=0;
     native_touch_stroke_count=0;strokeCount=0;
     for(unsigned i=0;i<4;++i)native_touch_extent[i]=(i%2)?-1:40000;

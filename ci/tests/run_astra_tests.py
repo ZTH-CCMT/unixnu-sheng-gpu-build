@@ -18,7 +18,7 @@ def run(cmd,name):
 objects=[]
 extract=r/'tests/extract_astra_probe.py'
 if extract.exists():run([sys.executable,'-B',extract,'--root',r,'--out',o],'probe-extraction')
-for stem in ['NvtProtocol','NvtTouchCore','NvtPartialObservation']:
+for stem in ['NvtProtocol','NvtTouchCore','NvtPartialObservation','NvtCoverage']:
  obj=o/(stem+'.o');run([os.environ.get('CC','cc'),'-std=c11',*flags,'-Wframe-larger-than=8192','-I',d,'-MMD','-MF',o/(stem+'.d'),'-c',d/(stem+'.c'),'-o',obj],stem);objects.append(obj)
 for source in sorted((r/'tests').glob('test_astra_*.cpp')):
  name=source.stem;binary=o/name

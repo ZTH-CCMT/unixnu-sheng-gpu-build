@@ -1,1 +1,1 @@
-Astra algorithm V3 touch implementation. Source and synthetic fixtures only. Apache-2.0 Novatek and BSD-2-Clause-Patent board/HID notices retained in ci/licenses. No real device logs, identity or credentials. Host results are not hardware qualification.
+Astra V3.1 touch implementation. Source and synthetic fixtures only. Apache-2.0 Novatek and BSD-2-Clause-Patent board/HID notices retained in ci/licenses. No real device logs, identity or credentials. Host results are not hardware qualification.

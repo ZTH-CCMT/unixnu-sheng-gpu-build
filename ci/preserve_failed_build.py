@@ -41,9 +41,13 @@ def collect(top, ci):
         'metadata/os27-update-lock.json': lock_path,
         'metadata/TOUCH-PATCH-NOTICE.txt': ci / 'TOUCH-PATCH-NOTICE.txt',
     }
-    for stem in ('NativeHidInput', 'TouchProbe', 'NvtProtocol', 'NvtTouchCore'):
-        for suffix in ('command.json', 'inputs.json'):
+    for stem in ('NativeHidInput', 'TouchProbe', 'NvtProtocol', 'NvtTouchCore', 'NvtPartialObservation', 'NvtCoverage'):
+        for suffix in ('command.json', 'inputs.json', 'log'):
             allowed['metadata/' + stem + '.' + suffix] = source_build / (stem + '.' + suffix)
+    allowed['metadata/touch-link-evidence.json'] = work / 'tree/build/native-legacy-display/touch-link-evidence.json'
+    allowed['logs/kernel.log'] = work / 'logs/kernel.log'
+    for stem in ('NvtPartialObservation', 'NvtCoverage'):
+        allowed['objects/' + stem + '.o'] = source_build / (stem + '.o')
     # Fixed license names, not a directory walk.
     for name in ('Apache-2.0.txt', 'UniXNU-sheng-BSD-2-Clause-Patent.txt',
                  'ShengHidInput-BSD-2-Clause-Patent.txt', 'ShengNovatekTouch-NOTICE.txt'):

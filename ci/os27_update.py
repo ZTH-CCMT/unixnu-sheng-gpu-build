@@ -12,6 +12,8 @@ import tomllib
 import urllib.request
 import zlib
 from pathlib import Path
+from touch_build_wiring import (COMPILED_TOUCH_UNITS, KERNEL_DEFINITIONS,
+                                source_builder_replacements, late_builder_replacements)
 
 LOCK = json.loads(Path(__file__).with_name('os27-update-lock.json').read_text())
 TOP = Path(os.environ.get('GITHUB_WORKSPACE', Path.cwd())).resolve()
@@ -67,9 +69,10 @@ def prepare_files(top):
     checked_replace(core / 'scripts/build-boot-runtime.py', edits['runtime'], [])
     from touch_frame_kind import apply_touch_patch
     apply_touch_patch(top)
-    checked_replace(core / 'scripts/build-sheng-source-drivers.py', edits['touch_build'], [
-        (b"            (device / 'drivers/ShengNovatekTouch/NvtTouchCore.c', []),",
-         b"            (device / 'drivers/ShengNovatekTouch/NvtTouchCore.c', []),\n            (device / 'drivers/ShengNovatekTouch/NvtPartialObservation.c', []),")])
+    checked_replace(core / 'scripts/build-sheng-source-drivers.py', edits['touch_build'],
+                    source_builder_replacements())
+    checked_replace(device / 'scripts/build-gop-legacy-display-27.py', edits['touch_late_build'],
+                    late_builder_replacements())
     board = tomllib.loads((device / 'board.toml').read_text())
     runtime = board['payload']['runtime']
     require(board['board']['os_profile'] == LOCK['profile'], 'Unexpected OS profile')
@@ -222,7 +225,7 @@ def build(seed):
     objects = {Path(item['source']).resolve(): item for component in driver_report['components'].values() for item in component['objects']}
     compilation = {}
     dependencies = {}
-    for stem in ('NativeHidInput', 'TouchProbe', 'NvtProtocol', 'NvtTouchCore', 'NvtPartialObservation'):
+    for stem in COMPILED_TOUCH_UNITS:
         command = json.loads((source_build / (stem + '.command.json')).read_text())
         inputs = json.loads((source_build / (stem + '.inputs.json')).read_text())
         dependencies.update({str(Path(key).resolve()): value for key, value in inputs.items()})
@@ -231,7 +234,7 @@ def build(seed):
         actual = (TOP / relative).resolve()
         require(actual.is_file() and digest(actual) == expected['after'], 'Resolved DEVICE touch source differs: ' + relative)
         proof = 'source-hash-only'
-        if actual.name in ('NativeHidInput.cpp', 'TouchProbe.cpp', 'NvtProtocol.c', 'NvtTouchCore.c', 'NvtPartialObservation.c') and '/Test/' not in relative:
+        if actual.stem in COMPILED_TOUCH_UNITS and actual.suffix in ('.c', '.cpp') and '/Test/' not in relative:
             item = objects.get(actual)
             require(item is not None and item['source_sha256'] == expected['after'] and digest(Path(item['object'])) == item['object_sha256'], 'Compiled source/object binding differs: ' + relative)
             require(str(actual) in compilation[actual.stem]['command'], 'Compile command selected a different file: ' + relative)
@@ -248,15 +251,30 @@ def build(seed):
             compilation['BootLog'] = {'command': command, 'command_sha256': digest(command_path)}
             proof = 'exact-BootLog-source-link-and-compile-command'
         bindings[relative] = {'sha256': expected['after'], 'source': str(actual), 'proof': proof}
+    # Bind the same compiled object hashes to the actual archive force-loaded at XNU's final link.
+    late_dir = ctx.tree / 'build/native-legacy-display'
+    late_evidence_path = late_dir / 'touch-link-evidence.json'
+    late_evidence = json.loads(late_evidence_path.read_text())
+    late_report = json.loads((late_dir / 'build-report.json').read_text())
+    late_archive = late_dir / 'libNativeLegacyDisplay.late.a'
+    require(late_evidence['status'] == 'COMPILED_OBJECTS_IN_ACTUAL_LATE_ARCHIVE', 'Late touch link audit did not pass')
+    require(late_evidence['source_report_sha256'] == digest(source_build / 'report.json'), 'Late archive used a different compile report')
+    require(late_evidence['late_archive_sha256'] == digest(late_archive) == late_report['archive_sha256'], 'Late touch archive/report mismatch')
+    require(late_report['touch_source_link'] == late_evidence, 'Late builder receipt differs from the actual archive receipt')
+    transport = driver_report['components']['ShengInputTransport']
+    require(late_evidence['transport_archive_sha256'] == transport['archive_sha256'] == digest(Path(transport['archive'])), 'Transport archive mismatch')
+    for stem, proof in late_evidence['objects'].items():
+        item = objects.get(Path(proof['source']).resolve())
+        require(item is not None and all(item[key] == proof[key] for key in ('source', 'source_sha256', 'object', 'object_sha256')), 'Late selected a different compiled object: ' + stem)
     image = (ctx.work / 'kernel/kernel.macho').read_bytes()
     require(image[:4] == bytes.fromhex('cffaedfe') and len(image) >= 32, 'Unexpected source kernel container')
     from fileset_symbols import required_definitions
     required = (['_native_touch_evidence_hid', '_native_touch_evidence_rows', '_native_touch_evidence_enabled']
                 if LOCK['touch_frame_kind_fix']['variant'] == 'testing'
-                else ['_nvt_touch_process_timed', '_nvt_touch_expire', '_nvt_touch_wait_us', '_native_touch_aggressive_stats', '_nvt_touch_process_partial', '_nvt_partial_measure', '_native_touch_time_ticks', '_native_touch_astra_stats'])
+                else ['_nvt_touch_process_timed', '_nvt_touch_expire', '_nvt_touch_wait_us', '_native_touch_aggressive_stats', '_nvt_touch_process_partial', '_nvt_partial_measure', '_native_touch_time_ticks', '_native_touch_astra_stats'] + list(KERNEL_DEFINITIONS))
     defined, symbol_evidence = required_definitions(image, required)
     binding_path = runtime_dir / 'touch-source-binding.json'
-    binding_path.write_text(json.dumps({'status': 'SOURCE_HASH_AND_DEFINED_SYMBOLS_PASS_NOT_HARDWARE', 'variant': LOCK['touch_frame_kind_fix']['variant'], 'sources': bindings, 'compile_evidence': compilation, 'kernel_sha256': sha(image), 'defined_symbols': defined}, indent=2) + '\n')
+    binding_path.write_text(json.dumps({'status': 'SOURCE_HASH_AND_DEFINED_SYMBOLS_PASS_NOT_HARDWARE', 'variant': LOCK['touch_frame_kind_fix']['variant'], 'sources': bindings, 'compile_evidence': compilation, 'late_link_evidence': late_evidence, 'kernel_sha256': sha(image), 'defined_symbols': defined}, indent=2) + '\n')
     inputs = json.loads((runtime_dir / 'inputs.json').read_text())
     require(inputs['data_volume_uuid'].upper() == bound_uuid, 'Build used a different Data UUID')
     config = ctx.config_path.read_text()
@@ -275,6 +293,7 @@ def build(seed):
     cache_report = verify_cache(runtime_dir, runtime_inputs['gpu-addon.bin'], runtime_inputs['trust-cache.bin'])
     allowed = {
         'touch-source-binding.json': binding_path,
+        'touch-link-evidence.json': late_evidence_path,
         '.config': ctx.config_path,
         'kernel/kernel.macho': ctx.work / 'kernel/kernel.macho',
         'provisional/DO-NOT-BOOT-payload.img': ctx.work / 'payload/payload.img',

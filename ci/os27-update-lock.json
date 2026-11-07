@@ -60,7 +60,11 @@
     },
     "touch_build": {
       "before": "edd98bb52db0c75198cc1af4017386a65359195a8a3b813cba07fcc477558200",
-      "after": "9eefb62f95146f1e7c48c8eb29c4715824c481675cba534f776ef20f16f07690"
+      "after": "8f140d9817c0945a9e15b484de7f9daeda17518b9709975a7c025b19793bcf22"
+    },
+    "touch_late_build": {
+      "before": "3232fa756e8ff2932cd3049428fc34cda13dd3270483f6ce55bfaab4bb6e57cf",
+      "after": "b22da3db9a8abcb0821f370aca5408d511476aaf50320faae27b6f1c194b5f32"
     }
   },
   "wifi_firmware": {
@@ -80,11 +84,11 @@
     }
   },
   "touch_frame_kind_fix": {
-    "id": "touch-astra-v3-continuous-20261107",
+    "id": "touch-astra-v3p1-continuous-20261107",
     "variant": "aggressive",
     "base_device_commit": "460179565a018c741b93e0b1efa07c55d4de497a",
     "base_novatek_commit": "3b44b1b7603eaadae942ea44ddc51bdcc48ad060",
-    "patch_sha256": "872142a2e3682938c2a482d5c6ce6db91fcc376ab9a7b3c3dbb79c4c338a08d5",
+    "patch_sha256": "25a68863f137cc02c242ea6fb35c7c4dc0333d9aeec343e6d9f38a905673bbe1",
     "files": {
       "device/drivers/ShengHidInput/NativeHidInput.cpp": {
         "before": "ea357ccfe634b078cc47a7c0180cd10f01fef099701654eb64dc87afd9f76ac2",
@@ -94,13 +98,25 @@
         "before": null,
         "after": "b11592c16e451d7e37c7e3cb8505503e2737659a3c27648a64ec1016f8b2fd07"
       },
+      "device/drivers/ShengNovatekTouch/NvtCoverage.c": {
+        "before": null,
+        "after": "90fc8983092cec95dfd38f8846f164de0070e061881344743d2d4cce918884f2"
+      },
+      "device/drivers/ShengNovatekTouch/NvtCoverage.h": {
+        "before": null,
+        "after": "2248985f573d2220b47cc70d744227b4a1e20778bce8eb323441279d17bd7529"
+      },
+      "device/drivers/ShengNovatekTouch/NvtPartialMathInline.h": {
+        "before": null,
+        "after": "5570490c39f124dcd447ed65e559c57f4a685b211b461612d796371ca178db76"
+      },
       "device/drivers/ShengNovatekTouch/NvtPartialObservation.c": {
         "before": null,
-        "after": "c8e9dc3f98cb40b346d0a826fc0cc2cb4c291e65e37e5594c52bccd4b36d60db"
+        "after": "7f7ea44e52ee01b902d3a417c7fd8290cb56d8954c7f125ac8438b7024406e04"
       },
       "device/drivers/ShengNovatekTouch/NvtPartialObservation.h": {
         "before": null,
-        "after": "b5ea47417b092fbfdacbeafc41e75388988b540947bac86b6c188fe3b2f74a9d"
+        "after": "34bb1a2fe26130dd1efd71ac2727b26d53d6a90d2754f359576b7d811667eed6"
       },
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": {
         "before": "6c641cce6e6edd320042a7c29fc44722e596e9c212d278ae3f02afed1faa66ba",
@@ -116,11 +132,11 @@
       },
       "device/drivers/ShengNovatekTouch/NvtTouchCore.c": {
         "before": "9a972542ebcc3e53fc2470f2f4526f16a1f3a144989b1167d22fbbcdf75112b4",
-        "after": "099aa60e4be46cdf8c468a4e61287e8cb98835432abc60154576e6e79384d899"
+        "after": "a067b9ef18fa9f312732fcfc89890230293f595cb03d09a360b1c1e019f0391b"
       },
       "device/drivers/ShengNovatekTouch/NvtTouchCore.h": {
         "before": "d3bb77c1b7e47a00defce855d1c7b2e55c542eb8068a488722afcbcd3201d08e",
-        "after": "e5e177f66698ccd9ec3e6b1460dbc8dcef3c463ee8335eb93da005bdc3ad1d92"
+        "after": "81a58af8dd0beb99029130842597a27a57269a1bae0a86b5c249b02dd0b05a1e"
       },
       "device/drivers/ShengNovatekTouch/Test/nvt-protocol.c": {
         "before": "e337e690bd04834ed2a7052feda5f07e9efeec185466d654a91516a9880aa65b",
@@ -130,13 +146,17 @@
         "before": "a539f2f5b37c01bbd19596416039aa3fa03d836eac7d2fcdf8eed08e58e263a4",
         "after": "e0d3b7ae7577e924ec56e393b2a97ef7d5ab8dbf44aa3d8822af46f748433f32"
       },
+      "device/package/TouchAstraProfile.h": {
+        "before": null,
+        "after": "629a0ac74419565b06519c14722082b464280b3036e87d24b790507501744b8f"
+      },
       "device/package/TouchEngine.h": {
         "before": null,
-        "after": "4d92902b291a1ad470cfed9d08cc0a7d71e24cfff831d4ba29f7f15109af3fe5"
+        "after": "4003ba3fd5cdd8e76b6ebf4263c0e9c86607ad49aa581b57f7278f715495b937"
       },
       "device/package/TouchProbe.cpp": {
         "before": "360aa3be9cfccee0509fcf1d6a4a8154e203b9ad615ee9b8c619bffcabb11002",
-        "after": "205fd01ce7d3d3cd4fd786bacb7ad629bf26f2a86a5cb8e3f4c1ab86fe4a7511"
+        "after": "064e19b5a6cc59219a564353ee75298e6ef889d52abc9c2a01c6954e42623c15"
       },
       "device/package/TouchReportTimeline.h": {
         "before": null,
@@ -147,23 +167,27 @@
     "diagnostic_only": false,
     "not_a_proven_touch_fix": true,
     "original_source_frozen": true,
-    "route": "astra-v3",
-    "display_version": "Astra V3",
+    "route": "route-v3p1",
+    "display_version": "V3.1",
     "inherits_route": "route-a",
     "production_core_hashes": {
       "device/drivers/ShengHidInput/NativeHidInput.cpp": "0bd4448b846bde02f9f17c3c4f9a62cef1505c782a4f67cf9779cf36478e0cec",
       "device/drivers/ShengHidInput/NativeHidTouchPlan.h": "b11592c16e451d7e37c7e3cb8505503e2737659a3c27648a64ec1016f8b2fd07",
-      "device/drivers/ShengNovatekTouch/NvtPartialObservation.c": "c8e9dc3f98cb40b346d0a826fc0cc2cb4c291e65e37e5594c52bccd4b36d60db",
-      "device/drivers/ShengNovatekTouch/NvtPartialObservation.h": "b5ea47417b092fbfdacbeafc41e75388988b540947bac86b6c188fe3b2f74a9d",
+      "device/drivers/ShengNovatekTouch/NvtCoverage.c": "90fc8983092cec95dfd38f8846f164de0070e061881344743d2d4cce918884f2",
+      "device/drivers/ShengNovatekTouch/NvtCoverage.h": "2248985f573d2220b47cc70d744227b4a1e20778bce8eb323441279d17bd7529",
+      "device/drivers/ShengNovatekTouch/NvtPartialMathInline.h": "5570490c39f124dcd447ed65e559c57f4a685b211b461612d796371ca178db76",
+      "device/drivers/ShengNovatekTouch/NvtPartialObservation.c": "7f7ea44e52ee01b902d3a417c7fd8290cb56d8954c7f125ac8438b7024406e04",
+      "device/drivers/ShengNovatekTouch/NvtPartialObservation.h": "34bb1a2fe26130dd1efd71ac2727b26d53d6a90d2754f359576b7d811667eed6",
       "device/drivers/ShengNovatekTouch/NvtProtocol.c": "e36aca444f6fe955325a6a0c43383c209ffd538a2ee1b98042e3ae9a6b0ff6b0",
       "device/drivers/ShengNovatekTouch/NvtProtocol.h": "49a2d6b1d021968825685c1f3e0b76dd366e020d53c815cb8b164e6043729553",
       "device/drivers/ShengNovatekTouch/NvtShapeMetricsInline.h": "9b6d755a41819e1f1666a21da183b8e8ed4da9a0f075ca9315caf6f187524ed7",
-      "device/drivers/ShengNovatekTouch/NvtTouchCore.c": "099aa60e4be46cdf8c468a4e61287e8cb98835432abc60154576e6e79384d899",
-      "device/drivers/ShengNovatekTouch/NvtTouchCore.h": "e5e177f66698ccd9ec3e6b1460dbc8dcef3c463ee8335eb93da005bdc3ad1d92",
+      "device/drivers/ShengNovatekTouch/NvtTouchCore.c": "a067b9ef18fa9f312732fcfc89890230293f595cb03d09a360b1c1e019f0391b",
+      "device/drivers/ShengNovatekTouch/NvtTouchCore.h": "81a58af8dd0beb99029130842597a27a57269a1bae0a86b5c249b02dd0b05a1e",
       "device/drivers/ShengNovatekTouch/Test/nvt-protocol.c": "fa515bb6008f7909c0ca118fdef0f87d3032fa2c02dc8552852ada9101d8c80a",
       "device/package/BootLog.c": "e0d3b7ae7577e924ec56e393b2a97ef7d5ab8dbf44aa3d8822af46f748433f32",
-      "device/package/TouchEngine.h": "4d92902b291a1ad470cfed9d08cc0a7d71e24cfff831d4ba29f7f15109af3fe5",
-      "device/package/TouchProbe.cpp": "205fd01ce7d3d3cd4fd786bacb7ad629bf26f2a86a5cb8e3f4c1ab86fe4a7511",
+      "device/package/TouchAstraProfile.h": "629a0ac74419565b06519c14722082b464280b3036e87d24b790507501744b8f",
+      "device/package/TouchEngine.h": "4003ba3fd5cdd8e76b6ebf4263c0e9c86607ad49aa581b57f7278f715495b937",
+      "device/package/TouchProbe.cpp": "064e19b5a6cc59219a564353ee75298e6ef889d52abc9c2a01c6954e42623c15",
       "device/package/TouchReportTimeline.h": "4a654d48aef1930f270b32c16b75d60c8ac2a82d10f9619863e4f8fde128d95d"
     }
   }

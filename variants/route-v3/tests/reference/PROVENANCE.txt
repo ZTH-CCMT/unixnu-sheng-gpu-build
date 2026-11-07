@@ -1,1 +1,0 @@
-Exact unmodified baseline author Core3b44b1b7603eaadae942ea44ddc51bdcc48ad060. Source license Apache-2.0, source headers retained. Reference only; never applied as variant production code.
