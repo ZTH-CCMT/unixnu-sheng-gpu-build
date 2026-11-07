@@ -67,6 +67,9 @@ def prepare_files(top):
     checked_replace(core / 'scripts/build-boot-runtime.py', edits['runtime'], [])
     from touch_frame_kind import apply_touch_patch
     apply_touch_patch(top)
+    checked_replace(core / 'scripts/build-sheng-source-drivers.py', edits['touch_build'], [
+        (b"            (device / 'drivers/ShengNovatekTouch/NvtTouchCore.c', []),",
+         b"            (device / 'drivers/ShengNovatekTouch/NvtTouchCore.c', []),\n            (device / 'drivers/ShengNovatekTouch/NvtPartialObservation.c', []),")])
     board = tomllib.loads((device / 'board.toml').read_text())
     runtime = board['payload']['runtime']
     require(board['board']['os_profile'] == LOCK['profile'], 'Unexpected OS profile')
@@ -219,7 +222,7 @@ def build(seed):
     objects = {Path(item['source']).resolve(): item for component in driver_report['components'].values() for item in component['objects']}
     compilation = {}
     dependencies = {}
-    for stem in ('NativeHidInput', 'TouchProbe', 'NvtProtocol', 'NvtTouchCore'):
+    for stem in ('NativeHidInput', 'TouchProbe', 'NvtProtocol', 'NvtTouchCore', 'NvtPartialObservation'):
         command = json.loads((source_build / (stem + '.command.json')).read_text())
         inputs = json.loads((source_build / (stem + '.inputs.json')).read_text())
         dependencies.update({str(Path(key).resolve()): value for key, value in inputs.items()})
@@ -228,7 +231,7 @@ def build(seed):
         actual = (TOP / relative).resolve()
         require(actual.is_file() and digest(actual) == expected['after'], 'Resolved DEVICE touch source differs: ' + relative)
         proof = 'source-hash-only'
-        if actual.name in ('NativeHidInput.cpp', 'TouchProbe.cpp', 'NvtProtocol.c', 'NvtTouchCore.c') and '/Test/' not in relative:
+        if actual.name in ('NativeHidInput.cpp', 'TouchProbe.cpp', 'NvtProtocol.c', 'NvtTouchCore.c', 'NvtPartialObservation.c') and '/Test/' not in relative:
             item = objects.get(actual)
             require(item is not None and item['source_sha256'] == expected['after'] and digest(Path(item['object'])) == item['object_sha256'], 'Compiled source/object binding differs: ' + relative)
             require(str(actual) in compilation[actual.stem]['command'], 'Compile command selected a different file: ' + relative)
@@ -250,13 +253,14 @@ def build(seed):
     from fileset_symbols import required_definitions
     required = (['_native_touch_evidence_hid', '_native_touch_evidence_rows', '_native_touch_evidence_enabled']
                 if LOCK['touch_frame_kind_fix']['variant'] == 'testing'
-                else ['_nvt_touch_process_timed', '_nvt_touch_expire', '_nvt_touch_wait_us', '_native_touch_aggressive_stats'])
+                else ['_nvt_touch_process_timed', '_nvt_touch_expire', '_nvt_touch_wait_us', '_native_touch_aggressive_stats', '_nvt_touch_process_partial', '_nvt_partial_measure', '_native_touch_time_ticks', '_native_touch_astra_stats'])
     defined, symbol_evidence = required_definitions(image, required)
     binding_path = runtime_dir / 'touch-source-binding.json'
     binding_path.write_text(json.dumps({'status': 'SOURCE_HASH_AND_DEFINED_SYMBOLS_PASS_NOT_HARDWARE', 'variant': LOCK['touch_frame_kind_fix']['variant'], 'sources': bindings, 'compile_evidence': compilation, 'kernel_sha256': sha(image), 'defined_symbols': defined}, indent=2) + '\n')
     inputs = json.loads((runtime_dir / 'inputs.json').read_text())
     require(inputs['data_volume_uuid'].upper() == bound_uuid, 'Build used a different Data UUID')
     config = ctx.config_path.read_text()
+    require(not re.search(r'sheng-swipe=[1-9]', config), 'Scripted touch producer is incompatible with ordered physical input')
     require(re.search(r'^CONFIG_XNU_OWNER_DATA_VOLUME_UUID="([^"]+)"', config, re.M)[1].upper() == bound_uuid,
             'Compiled Data UUID differs')
     policy = ctx.tree / 'build/sheng-source-storage/root-policies.bin'
